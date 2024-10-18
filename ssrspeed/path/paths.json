@@ -1,0 +1,20 @@
+{
+    "data": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\",
+    "logs": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\logs\\",
+    "results": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\results\\",
+    "tmp": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\tmp\\",
+    "uploads": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\tmp\\uploads\\",
+    "config.json": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\tmp\\config.json",
+    "ssrspeed.json": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\data\\ssrspeed.json",
+    "resources": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resources\\",
+    "clients": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resources\\clients-windows\\",
+    "databases": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resources\\databases\\",
+    "custom": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resources\\custom\\",
+    "resources.json": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resources\\resources.json",
+    "ssrspeed": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\",
+    "static": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resource\\static\\",
+    "fonts": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resource\\static\\fonts\\",
+    "logos": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resource\\static\\logos\\",
+    "templates": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resource\\templates\\",
+    "ssrspeed.example.json": "D:\\Codes\\pythonCodes\\aggregator\\ssrspeed\\resource\\ssrspeed.example.json"
+}

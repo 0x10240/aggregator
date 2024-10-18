@@ -14,18 +14,17 @@ import ssl
 import threading
 import time
 import traceback
-import typing
-import urllib
-import urllib.parse
-import urllib.request
 from collections import defaultdict
-from concurrent import futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from http.client import HTTPResponse
-from urllib import parse
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib import parse, request
 
 from geoip2 import database
 from tqdm import tqdm
+
+from tools.ip_location import load_mmdb
 
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
@@ -36,155 +35,19 @@ FILE_LOCK = threading.Lock()
 PATH = os.path.abspath(os.path.dirname(__file__))
 
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+    " Chrome/126.0.0.0 Safari/537.36"
 )
 
 
-def http_post(url: str, headers: dict = None, params: dict = {}, retry: int = 3, timeout: float = 6) -> HTTPResponse:
-    if params is None or type(params) != dict:
-        return None
-
-    timeout, retry = max(timeout, 1), retry - 1
-    try:
-        data = b""
-        if params and isinstance(params, dict):
-            data = urllib.parse.urlencode(params).encode(encoding="utf8")
-
-        request = urllib.request.Request(url=url, data=data, headers=headers, method="POST")
-        return urllib.request.urlopen(request, timeout=timeout, context=CTX)
-    except urllib.error.HTTPError as e:
-        if retry < 0 or e.code in [400, 401, 405]:
-            return None
-
-        return http_post(url=url, headers=headers, params=params, retry=retry, timeout=timeout)
-    except (TimeoutError, urllib.error.URLError) as e:
-        return None
-    except Exception:
-        if retry < 0:
-            return None
-        return http_post(url=url, headers=headers, params=params, retry=retry, timeout=timeout)
-
-
-def read_response(response: HTTPResponse, expected: int = 200, deserialize: bool = False, key: str = "") -> typing.Any:
-    if not response or not isinstance(response, HTTPResponse):
-        return None
-
-    success = expected <= 0 or expected == response.getcode()
-    if not success:
-        return None
-
-    try:
-        text = response.read()
-    except:
-        text = b""
-
-    try:
-        content = text.decode(encoding="UTF8")
-    except UnicodeDecodeError:
-        content = gzip.decompress(text).decode("UTF8")
-    except:
-        content = ""
-
-    if not deserialize:
-        return content
-
-    if not content:
-        return None
-    try:
-        data = json.loads(content)
-        return data if not key else data.get(key, None)
-    except:
-        return None
-
-
 def trim(text: str) -> str:
-    if not text or type(text) != str:
-        return ""
-
-    return text.strip()
-
-
-def write_file(filename: str, lines: str | list, overwrite: bool = True) -> None:
-    if not filename or not lines or type(lines) not in [str, list]:
-        return
-
-    try:
-        if not isinstance(lines, str):
-            lines = "\n".join(lines)
-
-        filepath = os.path.abspath(os.path.dirname(filename))
-        os.makedirs(filepath, exist_ok=True)
-        mode = "w" if overwrite else "a"
-
-        # waitting for lock
-        FILE_LOCK.acquire(30)
-
-        with open(filename, mode, encoding="UTF8") as f:
-            f.write(lines + "\n")
-            f.flush()
-
-        # release lock
-        FILE_LOCK.release()
-    except:
-        print(f"write {lines} to file {filename} failed")
-
-
-def get_cookies(url: str, filepath: str, username: str = "admin", password: str = "admin") -> dict:
-    url = trim(url)
-    if not url:
-        return None
-
-    username = trim(username) or "admin"
-    password = trim(password) or "admin"
-
-    data = {"username": username, "password": password}
-    headers = {
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "Origin": url,
-        "Referer": url,
-        "User-Agent": USER_AGENT,
-    }
-
-    response = http_post(url=f"{url}/login", headers=headers, params=data)
-    success = read_response(response=response, expected=200, deserialize=True, key="success")
-    if not success:
-        return None
-
-    write_file(filename=filepath, lines=url, overwrite=False)
-    cookies = response.getheader("Set-Cookie")
-    if not cookies:
-        return None
-
-    headers["Cookie"] = cookies
-    return headers
-
-
-def send_quest(url: str, subpath: str, headers: dict) -> dict:
-    url = trim(url)
-    if not url or not headers or not isinstance(headers, dict):
-        return None
-
-    subpath = trim(subpath)
-    if subpath:
-        url = parse.urljoin(url, subpath)
-
-    response = http_post(url=url, headers=headers, params={})
-    return read_response(response=response, expected=200, deserialize=True)
-
-
-def get_server_status(url: str, headers: dict) -> dict:
-    return send_quest(url=url, subpath="/server/status", headers=headers)
-
-
-def get_inbound_list(url: str, headers: dict) -> dict:
-    return send_quest(url=url, subpath="/xui/inbound/list", headers=headers)
+    return text.strip() if isinstance(text, str) else ""
 
 
 def convert_bytes_to_readable_unit(num: int) -> str:
-    TB = 1099511627776
-    GB = 1073741824
-    MB = 1048576
+    TB = 1 << 40
+    GB = 1 << 30
+    MB = 1 << 20
 
     if num >= TB:
         return f"{num / TB:.2f} TB"
@@ -194,410 +57,359 @@ def convert_bytes_to_readable_unit(num: int) -> str:
         return f"{num / MB:.2f} MB"
 
 
-def download_mmdb(repo: str, target: str, filepath: str, retry: int = 3):
-    """
-    Download GeoLite2-City.mmdb from github release
-    """
-    repo = trim(text=repo)
-    if not repo or len(repo.split("/", maxsplit=1)) != 2:
-        raise ValueError(f"invalid github repo name: {repo}")
-
-    target = trim(target)
-    if not target:
-        raise ValueError("invalid download target")
-
-    # extract download url from github release page
-    release_api = f"https://api.github.com/repos/{repo}/releases/latest?per_page=1"
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    }
-
-    count, response = 0, None
-    while count < retry and response is None:
-        try:
-            request = urllib.request.Request(url=release_api, headers=headers)
-            response = urllib.request.urlopen(request, timeout=10, context=CTX)
-        except Exception:
-            count += 1
-
-    assets = read_response(response=response, expected=200, deserialize=True, key="assets")
-    if not assets or not isinstance(assets, list):
-        raise Exception("no assets found in github release")
-
-    download_url = ""
-    for asset in assets:
-        if asset.get("name", "") == target:
-            download_url = asset.get("browser_download_url", "")
-            break
-
-    if not download_url:
-        raise Exception("no download url found in github release")
-
-    download(download_url, filepath, target, retry)
-
-
-def download(url: str, filepath: str, filename: str, retry: int = 3) -> None:
-    """Download file from url to filepath with filename"""
-
-    if retry < 0:
-        raise Exception("archieved max retry count for download")
-
-    url = trim(url)
-    if not url:
-        raise ValueError("invalid download url")
-
-    filepath = trim(filepath)
-    if not filepath:
-        raise ValueError("invalid save filepath")
-
-    filename = trim(filename)
-    if not filename:
-        raise ValueError("invalid save filename")
-
-    if not os.path.exists(filepath) or not os.path.isdir(filepath):
-        os.makedirs(filepath)
-
-    fullpath = os.path.join(filepath, filename)
-    if os.path.exists(fullpath) and os.path.isfile(fullpath):
-        os.remove(fullpath)
-
-    # download target file from github release to fullpath
-    try:
-        urllib.request.urlretrieve(url=url, filename=fullpath)
-    except Exception:
-        return download(url, filepath, filename, retry - 1)
-
-    print(f"download file {filename} to {fullpath} success")
-
-
-def load_mmdb(
-    directory: str, repo: str = "alecthw/mmdb_china_ip_list", filename: str = "Country.mmdb", update: bool = False
-) -> database.Reader:
-    filepath = os.path.join(directory, filename)
-    if update or not os.path.exists(filepath) or not os.path.isfile(filepath):
-        if not download_mmdb(repo, filename, directory):
-            return None
-
-    return database.Reader(filepath)
-
-
 @dataclass
-class RunningState(object):
-    # 上传总流量
+class RunningState:
+    url: str = ""
     sent: str = "unknown"
-
-    # 下载总流量
     recv: str = "unknown"
-
-    # 运行状态
     state: str = "unknown"
-
-    # xui 版本
     version: str = "unknown"
-
-    # 运行时间
     uptime: int = 0
-
-    # 连接
-    links: list = None
+    links: List[Tuple[str, int, int]] = None
 
 
-def get_running_state(data: dict) -> RunningState:
-    if not data or not isinstance(data, dict) or "obj" not in data:
-        return RunningState()
+class Panel:
+    def __init__(self, url: str, username: str = "admin", password: str = "admin"):
+        self.url = trim(url)
+        self.username = trim(username) or "admin"
+        self.password = trim(password) or "admin"
+        self.headers: Dict[str, str] = {
+            "User-Agent": USER_AGENT,
+        }
+        self.cookies: Optional[str] = None
 
-    uptime, sent, recv, state, version = 0, "", "", "", ""
-    if "uptime" in data["obj"]:
-        uptime = data["obj"]["uptime"]
-    if "netTraffic" in data["obj"]:
-        sent = convert_bytes_to_readable_unit(data["obj"]["netTraffic"]["sent"])
-        recv = convert_bytes_to_readable_unit(data["obj"]["netTraffic"]["recv"])
-    if "xray" in data["obj"]:
-        state = data["obj"]["xray"]["state"]
-        version = data["obj"]["xray"]["version"]
+    def http_post(
+            self,
+            url: str,
+            headers: Dict[str, str] = None,
+            params: Dict[str, Any] = None,
+            retry: int = 3,
+            timeout: float = 6,
+    ) -> Optional[HTTPResponse]:
+        if params is None:
+            params = {}
+        timeout, retry = max(timeout, 1), retry - 1
+        try:
+            data = parse.urlencode(params).encode("utf-8") if params else b""
+            req = request.Request(url=url, data=data, headers=headers or {}, method="POST")
+            return request.urlopen(req, timeout=timeout, context=CTX)
+        except request.HTTPError as e:
+            if retry < 0 or e.code in [400, 401, 405]:
+                return None
+            return self.http_post(url, headers, params, retry, timeout)
+        except (TimeoutError, request.URLError):
+            return None
+        except Exception:
+            if retry < 0:
+                return None
+            return self.http_post(url, headers, params, retry, timeout)
 
-    return RunningState(sent=sent, recv=recv, state=state, version=version, uptime=uptime)
-
-
-def generate_subscription_links(data: dict, address: str, reader: database.Reader) -> list[tuple[str, str, str]]:
-    if not data or not isinstance(data, dict) or not data.pop("success", False) or not address:
-        return []
-
-    result = list()
-    for item in data.get("obj", []):
-        if not item or not isinstance(item, dict) or not item.get("enable", False):
-            continue
-
-        protocol, port, link = item["protocol"], item["port"], ""
-        remark = item.get("remark", "")
-
-        if reader:
+    def read_response(
+            self, response: HTTPResponse, expected: int = 200, deserialize: bool = False, key: str = ""
+    ) -> Any:
+        if not response or response.getcode() != expected:
+            return None
+        try:
+            text = response.read()
             try:
-                ip = socket.gethostbyname(address)
-                response = reader.country(ip)
-                country = response.country.names.get("zh-CN", "")
-                if country == "中国":
-                    continue
+                content = text.decode("utf-8")
+            except UnicodeDecodeError:
+                content = gzip.decompress(text).decode("utf-8")
+        except:
+            content = ""
 
-                remark = country if country else remark
-            except Exception:
-                pass
+        if not deserialize:
+            return content
 
-        if protocol == "vless":
-            settings = json.loads(item["settings"])
-            client_id = settings["clients"][0]["id"]
-            flow = settings["clients"][0].get("flow", "")
-            stream_settings = json.loads(item["streamSettings"])
-            network = stream_settings["network"]
-            security = stream_settings["security"]
-            ws_settings = stream_settings.get("wsSettings", {})
-            path = ws_settings.get("path", "/")
-            query = f"type={network}&security={security}&path={parse.quote(path)}"
-            if flow:
-                if flow != "xtls-rprx-vision":
-                    continue
-                query += f"&flow={flow}"
-            link = f"{protocol}://{client_id}@{address}:{port}?{query}"
-        elif protocol == "vmess":
-            settings = json.loads(item["settings"])
-            client_id = settings["clients"][0]["id"]
-            stream_settings = json.loads(item["streamSettings"])
-            network = stream_settings["network"]
-            ws_settings = stream_settings.get("wsSettings", {})
-            path = ws_settings.get("path", "/")
-            vmess_config = {
-                "v": "2",
-                "ps": remark or item["tag"],
-                "add": address,
-                "port": item["port"],
-                "id": client_id,
-                "aid": "0",
-                "net": network,
-                "type": "none",
-                "host": "",
-                "path": path,
-                "tls": "",
-            }
-            link = f"vmess://{base64.urlsafe_b64encode(json.dumps(vmess_config).encode()).decode().strip('=')}"
-        elif protocol == "trojan":
-            settings = json.loads(item["settings"])
-            client_id = settings["clients"][0]["password"]
-            link = f"trojan://{client_id}@{address}:{port}"
-        elif protocol == "shadowsocks":
-            settings = json.loads(item["settings"])
-            method = settings["method"]
-            password = settings["password"]
-            link = (
-                f"ss://{base64.urlsafe_b64encode(f'{method}:{password}@{address}:{port}'.encode()).decode().strip('=')}"
-            )
-
-        if link:
-            if remark and protocol != "vmess":
-                link += f"#{remark}"
-
-            result.append((link, item["expiryTime"], item["total"]))
-
-    return result
-
-
-def check(url: str, filepath: str, reader: database.Reader) -> RunningState:
-    try:
-        address = parse.urlparse(url=url).hostname
-    except:
-        print(f"cannot extract host from url: {url}")
-        return None
-
-    try:
-        headers = get_cookies(url=url, filepath=filepath)
-        status = get_server_status(url, headers)
-        if not status:
+        try:
+            data = json.loads(content)
+            return data if not key else data.get(key)
+        except:
             return None
 
-        running_state = get_running_state(data=status)
+    def login(self) -> bool:
+        data = {"username": self.username, "password": self.password}
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Origin": self.url,
+            "Referer": self.url,
+            "User-Agent": USER_AGENT,
+        }
+        response = self.http_post(f"{self.url}/login", headers=headers, params=data)
+        success = self.read_response(response, expected=200, deserialize=True, key="success")
+        if success:
+            self.cookies = response.getheader("Set-Cookie")
+            self.headers.update({"Cookie": self.cookies})
+            return True
+        return False
 
-        if "appStats" not in status.get("obj", {}):
-            inbounds = get_inbound_list(url, headers)
-            running_state.links = generate_subscription_links(data=inbounds, address=address, reader=reader)
+    def send_request(self, subpath: str) -> Optional[Dict[str, Any]]:
+        if not self.headers.get("Cookie"):
+            return None
+        url = parse.urljoin(self.url, subpath)
+        response = self.http_post(url, headers=self.headers, params={})
+        return self.read_response(response, expected=200, deserialize=True)
 
-        return running_state
-    except Exception:
-        return None
+    def get_server_status(self) -> Optional[Dict[str, Any]]:
+        return self.send_request("/server/status")
 
+    def get_inbound_list(self) -> Optional[Dict[str, Any]]:
+        return self.send_request("/xui/inbound/list")
 
-def multi_thread_run(
-    func: typing.Callable,
-    tasks: list,
-    num_threads: int = None,
-    show_progress: bool = False,
-    description: str = "",
-) -> list:
-    if not func or not tasks or not isinstance(tasks, list):
-        return []
+    def get_running_state(self, data: Dict[str, Any]) -> RunningState:
+        obj = data.get("obj", {})
+        uptime = obj.get("uptime", 0)
+        net_traffic = obj.get("netTraffic", {})
+        sent = convert_bytes_to_readable_unit(net_traffic.get("sent", 0))
+        recv = convert_bytes_to_readable_unit(net_traffic.get("recv", 0))
+        xray = obj.get("xray", {})
+        state = xray.get("state", "unknown")
+        version = xray.get("version", "unknown")
+        return RunningState(
+            url=self.url, sent=sent, recv=recv, state=state, version=version, uptime=uptime
+        )
 
-    if num_threads is None or num_threads <= 0:
-        num_threads = min(len(tasks), (os.cpu_count() or 1) * 2)
+    def generate_subscription_links(
+            self, data: Dict[str, Any], address: str, reader: database.Reader
+    ) -> List[Tuple[str, int, int]]:
+        if not data or not data.get("success"):
+            return []
+        result = []
+        for item in data.get("obj", []):
+            if not item.get("enable"):
+                continue
+            protocol = item["protocol"]
+            port = item["port"]
+            remark = item.get("remark", "")
+            if reader:
+                try:
+                    ip = socket.gethostbyname(address)
+                    response = reader.country(ip)
+                    country = response.country.names.get("zh-CN", "")
+                    if country == "中国":
+                        continue
+                    remark = country or remark
+                except Exception:
+                    pass
+            link = self.build_link(protocol, item, address, port, remark)
+            if link:
+                result.append((link, item["expiryTime"], item["total"]))
+        return result
 
-    funcname = getattr(func, "__name__", repr(func))
-
-    results, starttime = [None] * len(tasks), time.time()
-    with futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        if isinstance(tasks[0], (list, tuple)):
-            collections = {executor.submit(func, *param): i for i, param in enumerate(tasks)}
-        else:
-            collections = {executor.submit(func, param): i for i, param in enumerate(tasks)}
-
-        items = futures.as_completed(collections)
-        if show_progress:
-            description = trim(description) or "Progress"
-            items = tqdm(items, total=len(collections), desc=description, leave=True)
-
-        for future in items:
-            try:
-                result = future.result()
-                index = collections[future]
-                results[index] = result
-            except:
-                print(f"function {funcname} execution generated an exception, message:\n{traceback.format_exc()}")
-
-    print(f"[Concurrent] execute [{funcname}] finished, count: {len(tasks)}, cost: {time.time()-starttime:.2f}s")
-    return results
-
-
-def extract_domain(url: str, include_protocal: bool = True) -> str:
-    if not url:
+    def build_link(self, protocol: str, item: Dict[str, Any], address: str, port: int, remark: str) -> str:
+        if protocol == "vless":
+            return self.build_vless_link(item, address, port, remark)
+        elif protocol == "vmess":
+            return self.build_vmess_link(item, address, port, remark)
+        elif protocol == "trojan":
+            return self.build_trojan_link(item, address, port, remark)
+        elif protocol == "shadowsocks":
+            return self.build_shadowsocks_link(item, address, port, remark)
         return ""
 
-    start = url.find("//")
-    if start == -1:
-        start = -2
+    def build_vless_link(self, item: Dict[str, Any], address: str, port: int, remark: str) -> str:
+        settings = json.loads(item["settings"])
+        client_id = settings["clients"][0]["id"]
+        flow = settings["clients"][0].get("flow", "")
+        stream_settings = json.loads(item["streamSettings"])
+        network = stream_settings["network"]
+        security = stream_settings["security"]
+        ws_settings = stream_settings.get("wsSettings", {})
+        path = ws_settings.get("path", "/")
+        query = f"type={network}&security={security}&path={parse.quote(path)}"
+        if flow and flow == "xtls-rprx-vision":
+            query += f"&flow={flow}"
+        else:
+            return ""
+        link = f"vless://{client_id}@{address}:{port}?{query}"
+        if remark:
+            link += f"#{parse.quote(remark)}"
+        return link
 
-    end = url.find("/", start + 2)
-    if end == -1:
-        end = len(url)
+    def build_vmess_link(self, item: Dict[str, Any], address: str, port: int, remark: str) -> str:
+        settings = json.loads(item["settings"])
+        client_id = settings["clients"][0]["id"]
+        stream_settings = json.loads(item["streamSettings"])
+        network = stream_settings["network"]
+        ws_settings = stream_settings.get("wsSettings", {})
+        path = ws_settings.get("path", "/")
+        vmess_config = {
+            "v": "2",
+            "ps": remark or item["tag"],
+            "add": address,
+            "port": port,
+            "id": client_id,
+            "aid": "0",
+            "net": network,
+            "type": "none",
+            "host": "",
+            "path": path,
+            "tls": "",
+        }
+        link = f"vmess://{base64.urlsafe_b64encode(json.dumps(vmess_config).encode()).decode().strip('=')}"
+        return link
 
-    if include_protocal:
-        return url[:end]
+    def build_trojan_link(self, item: Dict[str, Any], address: str, port: int, remark: str) -> str:
+        settings = json.loads(item["settings"])
+        client_id = settings["clients"][0]["password"]
+        link = f"trojan://{client_id}@{address}:{port}"
+        if remark:
+            link += f"#{parse.quote(remark)}"
+        return link
 
-    return url[start + 2 : end]
+    def build_shadowsocks_link(self, item: Dict[str, Any], address: str, port: int, remark: str) -> str:
+        settings = json.loads(item["settings"])
+        method = settings["method"]
+        password = settings["password"]
+        creds = f"{method}:{password}@{address}:{port}"
+        link = f"ss://{base64.urlsafe_b64encode(creds.encode()).decode().strip('=')}"
+        if remark:
+            link += f"#{parse.quote(remark)}"
+        return link
 
-
-def dedup(filepath: str) -> None:
-    def include_subpath(url: str) -> bool:
-        url = trim(url).lower()
-        if url.startswith("http://"):
-            url = url[7:]
-        elif url.startswith("https://"):
-            url = url[8:]
-
-        return "/" in url and not url.endswith("/")
-
-    def cmp(url: str) -> str:
-        x = 1 if include_subpath(url=url) else 0
-        y = 2 if url.startswith("https://") else 1 if url.startswith("http://") else 0
-        return (x, y, url)
-
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        print(f"file {filepath} not exists")
-        return
-
-    lines, groups, links = [], defaultdict(set), []
-    with open(filepath, "r", encoding="utf8") as f:
-        lines = f.readlines()
-
-    # filetr and group by domain
-    for line in lines:
-        line = trim(line).lower()
-        if not line or line.startswith("#") or line.startswith(";"):
-            continue
-
-        domain = extract_domain(url=line, include_protocal=False)
-        if domain:
-            groups[domain].add(line)
-
-    # under the same domain name, give priority to URLs starting with https://
-    for v in groups.values():
-        if not v:
-            continue
-
-        urls = list(v)
-        if len(urls) > 1:
-            urls.sort(key=cmp, reverse=True)
-
-        links.append(urls[0])
-
-    total, remain = len(lines), len(links)
-    print(f"[Check] finished dedup for file: {filepath}, total: {total}, remain: {remain}, drop: {total-remain}")
-
-    write_file(filename=filepath, lines=links, overwrite=True)
-
-
-def generate_markdown(items: list[RunningState], filepath: str) -> None:
-    if not items or not isinstance(items, list) or not filepath:
-        return
-
-    headers = ["XRay状态", "XRay版本", "运行时间", "上行总流量", "下行总流量", "订阅链接"]
-
-    table = "| " + " | ".join(headers) + " |\n"
-    table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-
-    for item in items:
-        if not isinstance(item, RunningState):
-            continue
-
-        link = "<br />".join([x[0] for x in item.links])
-        table += f"| {item.state} | {item.version} | {item.uptime} | {item.sent} | {item.recv} | {link} |\n"
-
-    write_file(filename=filepath, lines=table, overwrite=True)
+    def check(self, filepath: str, reader: database.Reader) -> Optional[RunningState]:
+        try:
+            address = parse.urlparse(self.url).hostname
+            if not self.login():
+                return None
+            status_data = self.get_server_status()
+            if not status_data:
+                return None
+            running_state = self.get_running_state(status_data)
+            inbounds = self.get_inbound_list()
+            if inbounds:
+                running_state.links = self.generate_subscription_links(inbounds, address, reader)
+            return running_state
+        except Exception:
+            return None
 
 
-def main(args: argparse.Namespace) -> None:
-    workspace = os.path.abspath(trim(args.workspace) or PATH)
+class Checker:
+    def __init__(
+            self,
+            domains: List[str],
+            workspace: str,
+            available_file: str,
+            link_file: str,
+            markdown_file: str,
+            num_threads: int = 0,
+            invisible: bool = False,
+    ):
+        self.domains = domains
+        self.workspace = workspace
+        self.available_file = os.path.join(workspace, available_file)
+        self.link_file = os.path.join(workspace, link_file)
+        self.markdown_file = os.path.join(workspace, markdown_file)
+        self.num_threads = num_threads or (os.cpu_count() or 1) * 2
+        self.invisible = invisible
+        self.reader = load_mmdb(r'../resource', "GeoLite2-City.mmdb")
 
-    source = os.path.join(workspace, trim(args.filename))
-    if not os.path.exists(source) or not os.path.isfile(source):
-        print(f"scan failed due to file {source} not exist")
-        return
+    @staticmethod
+    def write_file(filename: str, lines: List[str], overwrite: bool = True) -> None:
+        if not filename or not lines:
+            return
+        try:
+            filepath = os.path.abspath(os.path.dirname(filename))
+            os.makedirs(filepath, exist_ok=True)
+            mode = "w" if overwrite else "a"
+            with FILE_LOCK:
+                with open(filename, mode, encoding="utf-8") as f:
+                    f.write("\n".join(lines) + "\n")
+        except:
+            print(f"Failed to write to file {filename}")
 
-    dedup(filepath=source)
+    @staticmethod
+    def extract_domain(url: str, include_protocol: bool = True) -> str:
+        if not url:
+            return ""
+        parsed = parse.urlparse(url)
+        if include_protocol:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return parsed.netloc
 
-    domains = []
-    with open(source) as f:
-        domains = [x for x in f.readlines() if x and not x.startswith("#")]
+    def dedup(self) -> None:
+        def include_subpath(url: str) -> bool:
+            url = trim(url).lower()
+            if url.startswith("http://"):
+                url = url[7:]
+            elif url.startswith("https://"):
+                url = url[8:]
+            return "/" in url and not url.endswith("/")
 
-    if not domains:
-        print("skip scan due to empty domain list")
-        return
+        def cmp(url: str) -> Tuple[int, int, str]:
+            x = 1 if include_subpath(url) else 0
+            y = 2 if url.startswith("https://") else 1 if url.startswith("http://") else 0
+            return (x, y, url)
 
-    # load mmdb
-    reader = load_mmdb(directory=workspace, update=args.update)
+        groups = defaultdict(set)
+        for line in self.domains:
+            line = trim(line).lower()
+            if not line or line.startswith("#") or line.startswith(";"):
+                continue
+            domain = self.extract_domain(line, include_protocol=False)
+            if domain:
+                groups[domain].add(line)
 
-    available = os.path.join(workspace, trim(args.available))
-    tasks = [[domain, available, reader] for domain in domains]
+        links = []
+        for v in groups.values():
+            if not v:
+                continue
+            urls = sorted(v, key=cmp, reverse=True)
+            links.append(urls[0])
 
-    print(f"start to scan domains, total: {len(tasks)}")
-    result = multi_thread_run(func=check, tasks=tasks, num_threads=args.thread, show_progress=not args.invisible)
+        total, remain = len(self.domains), len(links)
+        print(f"[Check] Deduplicated domains. Total: {total}, Remaining: {remain}, Dropped: {total - remain}")
+        self.domains = links
 
-    effectives, links = [], []
-    for item in result:
-        if not item or not isinstance(item, RunningState) or not item.links:
-            continue
+    def check_domain(self, domain: str) -> Optional[RunningState]:
+        panel = Panel(url=domain)
+        return panel.check(self.available_file, self.reader)
 
-        effectives.append(item)
-        links.extend([x[0] for x in item.links])
+    def run_checks(self) -> List[RunningState]:
+        results = []
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = {
+                executor.submit(self.check_domain, domain): domain for domain in self.domains
+            }
+            items = as_completed(futures)
+            if not self.invisible:
+                items = tqdm(items, total=len(futures), desc="Checking Domains", leave=True)
+            for future in items:
+                try:
+                    result = future.result()
+                    if result:
+                        results.append(result)
+                except:
+                    print(f"Error checking domain: {futures[future]}")
+        return results
 
-    if links:
-        filename = os.path.join(workspace, trim(args.link) or "links.txt")
-        print(f"found {len(links)} links, save it to {filename}")
+    def generate_markdown(self, items: List[RunningState]) -> None:
+        headers = ["XRay状态", "XRay版本", "运行时间", "上行总流量", "下行总流量", "订阅链接"]
+        table = "| " + " | ".join(headers) + " |\n"
+        table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+        for item in items:
+            link = "<br />".join([x[0] for x in item.links]) if item.links else ""
+            table += (
+                f"| {item.state} | {item.version} | {item.uptime} | {item.sent} | {item.recv} | {link} |\n"
+            )
+        self.write_file(self.markdown_file, [table], overwrite=True)
 
-        content = base64.b64encode("\n".join(links).encode(encoding="utf8")).decode(encoding="utf8")
-        write_file(filename=filename, lines=content, overwrite=True)
+    def save_links(self, items: List[RunningState]) -> None:
+        links = [link for item in items if item.links for link, _, _ in item.links]
+        if links:
+            content = base64.b64encode("\n".join(links).encode("utf-8")).decode("utf-8")
+            self.write_file(self.link_file, [content], overwrite=True)
+            print(f"Found {len(links)} links, saved to {self.link_file}")
 
-    markdown = os.path.join(workspace, trim(args.markdown) or "table.md")
-    generate_markdown(items=effectives, filepath=markdown)
+    def run(self) -> None:
+        self.dedup()
+        results = self.run_checks()
+        # self.save_links(results)
+        self.generate_markdown(results)
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -606,7 +418,7 @@ if __name__ == "__main__":
         type=str,
         required=False,
         default="availables.txt",
-        help="save correct username password filename",
+        help="Filename to save valid credentials",
     )
 
     parser.add_argument(
@@ -614,7 +426,7 @@ if __name__ == "__main__":
         "--filename",
         type=str,
         required=True,
-        help="domain list filename",
+        help="Filename containing domain list",
     )
 
     parser.add_argument(
@@ -623,7 +435,7 @@ if __name__ == "__main__":
         dest="invisible",
         action="store_true",
         default=False,
-        help="don't show check progress bar",
+        help="Don't show progress bar",
     )
 
     parser.add_argument(
@@ -632,7 +444,7 @@ if __name__ == "__main__":
         type=str,
         required=False,
         default="links.txt",
-        help="link list filename",
+        help="Filename to save subscription links",
     )
 
     parser.add_argument(
@@ -641,7 +453,7 @@ if __name__ == "__main__":
         type=str,
         required=False,
         default="table.md",
-        help="markdown filename for result",
+        help="Filename to save markdown table of results",
     )
 
     parser.add_argument(
@@ -650,16 +462,7 @@ if __name__ == "__main__":
         type=int,
         required=False,
         default=0,
-        help="number of concurrent threads, defaults to double the number of CPU cores",
-    )
-
-    parser.add_argument(
-        "-u",
-        "--update",
-        dest="update",
-        action="store_true",
-        default=False,
-        help="whether to update the IP database",
+        help="Number of concurrent threads, default is double the number of CPU cores",
     )
 
     parser.add_argument(
@@ -668,7 +471,39 @@ if __name__ == "__main__":
         type=str,
         default=PATH,
         required=False,
-        help="workspace absolute path",
+        help="Workspace absolute path",
     )
 
-    main(parser.parse_args())
+    return parser.parse_args()
+
+
+def check_xui_panel():
+    args = parse_args()
+    workspace = os.path.abspath(trim(args.workspace) or PATH)
+    source = os.path.join(workspace, trim(args.filename))
+
+    if not os.path.exists(source) or not os.path.isfile(source):
+        print(f"Scan failed due to file {source} not existing")
+        return
+
+    with open(source, "r", encoding="utf-8") as f:
+        domains = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+    if not domains:
+        print("No domains to scan")
+        return
+
+    checker = Checker(
+        domains=domains,
+        workspace=workspace,
+        available_file=args.available,
+        link_file=args.link,
+        markdown_file=args.markdown,
+        num_threads=args.thread,
+        invisible=args.invisible,
+    )
+    checker.run()
+
+
+if __name__ == "__main__":
+    check_xui_panel()

@@ -1,0 +1,29 @@
+proxies:
+  - {name: 专用, server: la.edgn.xyz, port: 26123, type: vless, uuid: 37d69683-9a7f-4a74-9c49-104c252226fa, tls: true, servername: la.edgn.xyz, network: tcp}
+  - {name: admin, server: 1.14.131.81, port: 52376, type: vmess, uuid: 8c67a8de-2763-4c72-f89f-d88659ee63cd, alterId: 0, cipher: auto, tls: false}
+  - {name: "", server: 172.235.32.105, port: 30529, type: vmess, uuid: 2d5223ac-bf5e-4d29-8602-2b851e064136, alterId: 0, cipher: auto, tls: false}
+  - {name: " 2", server: 129.211.224.177, port: 8080, type: vmess, uuid: ae61c2ea-0537-4bfa-d878-84d100fb8c25, alterId: 0, cipher: auto, tls: false}
+  - {name: ytb22, server: ytb22.qhf3521.xyz, port: 443, type: vless, uuid: 35f07114-8feb-4a96-a078-01afccebc7e5, tls: true, servername: ytb22.qhf3521.xyz, network: ws, ws-opts: {path: /ytb22.qhf3521, headers: {Host: ytb22.qhf3521.xyz}}}
+  - {name: ky25, server: ky25.hjut6y44.xyz, port: 443, type: vless, uuid: af508403-b3b7-44e2-8701-7eecee80264a, tls: true, servername: ky25.hjut6y44.xyz, network: ws, ws-opts: {path: /ky25.hjut6y44, headers: {Host: ky25.hjut6y44.xyz}}}
+  - {name: 🇯🇵 东京2, server: 47.245.40.5, port: 18993, type: vmess, uuid: 44781393-39b5-4d5d-ec72-59258406a138, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /44781393}}
+  - {name: vmess+ws, server: 34.95.0.138, port: 20201, type: vmess, uuid: de0d2587-3980-49a7-9973-670b40741a71, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /de0d2587}}
+  - {name: ytb28, server: ytb28.tsidkfwq211.xyz, port: 443, type: vless, uuid: cb19d3ea-e9e7-4cb6-a178-191234fd6935, tls: true, servername: ytb28.tsidkfwq211.xyz, network: ws, ws-opts: {path: /ytb28.tsidkfwq211, headers: {Host: ytb28.tsidkfwq211.xyz}}}
+  - {name: 🇺🇸 us, server: 154.205.157.139, port: 45293, type: vless, uuid: 0a61f219-9cde-4fb9-c2da-c5e87ededb42, tls: false, network: tcp}
+  - {name: 🇯🇵 东京4, server: 8.209.247.43, port: 35646, type: vmess, uuid: c6664f83-eed8-4236-b1c4-d146516e5139, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /c6664f83}}
+  - {name: 244, server: mg244.zxc6696.com, port: 2053, type: vmess, uuid: cecf4844-3f68-4c21-c73a-5ffc4ea5cd7f, alterId: 0, cipher: auto, tls: true, network: ws, ws-opts: {path: /01, headers: {Host: mg244.zxc6696.com}}}
+  - {name: ky22, server: ky22.wefdgrg452.xyz, port: 443, type: vless, uuid: 2a510869-f7c1-40ed-8167-098a286fcfd6, tls: true, servername: ky22.wefdgrg452.xyz, network: ws, ws-opts: {path: /ky22.wefdgrg452, headers: {Host: ky22.wefdgrg452.xyz}}}
+  - {name: halo, server: qnmgfwd.top, port: 443, type: vmess, uuid: 6f6fbeab-05a6-40c8-a5c5-83b1b5d91814, alterId: 0, cipher: auto, tls: true, network: ws, ws-opts: {path: /bba, headers: {Host: qnmgfwd.top}}}
+  - {name: ky25 2, server: ky25.hjut6y44.xyz, port: 443, type: vless, uuid: af508403-b3b7-44e2-8701-7eecee80264a, tls: true, servername: ky25.hjut6y44.xyz, network: ws, ws-opts: {path: /ky25.hjut6y44, headers: {Host: ky25.hjut6y44.xyz}}}
+  - {name: admin 2, server: 123.207.49.13, port: 28728, type: vmess, uuid: c5c4e6d9-0f01-40cd-f0a7-454f6716184b, alterId: 0, cipher: auto, tls: false}
+  - {name: admin 3, server: 193.112.118.53, port: 33901, type: vmess, uuid: 5d0c4a81-5aca-4f2d-912c-bbdbad5ff17f, alterId: 0, cipher: auto, tls: false}
+  - {name: ky26, server: ky26.jfgh642.xyz, port: 443, type: vless, uuid: 6da288b5-9724-41a8-b001-86bbf14d4bc2, tls: true, servername: ky26.jfgh642.xyz, network: ws, ws-opts: {path: /ky26.jfgh642, headers: {Host: ky26.jfgh642.xyz}}}
+  - {name: ky31, server: ky31.kujvefew545.sbs, port: 443, type: vless, uuid: 8a989b8d-4c86-48aa-b8cd-a9ac448f41b6, tls: true, servername: ky31.kujvefew545.sbs, network: ws, ws-opts: {path: /ky31.kujvefew545, headers: {Host: ky31.kujvefew545.sbs}}}
+  - {name: ytb27, server: ytb27.brtge4221.xyz, port: 443, type: vless, uuid: e150cc23-30e2-4287-d242-714c868c6fdc, tls: true, servername: ytb27.brtge4221.xyz, network: ws, ws-opts: {path: /ytb27.brtge4221, headers: {Host: ytb27.brtge4221.xyz}}}
+  - {name: 1, server: 206.245.237.182, port: 11064, type: vmess, uuid: 421c2352-1924-44ae-fdc1-564ef35d3a23, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /421c2352}}
+  - {name: ph05, server: ph05.hgryhre446.sbs, port: 443, type: vless, uuid: bf3bcbc7-d97a-4278-af49-954b93c9f665, tls: true, servername: ph05.hgryhre446.sbs, network: ws, ws-opts: {path: /ph05.hgryhre446, headers: {Host: ph05.hgryhre446.sbs}}}
+  - {name: 🇯🇵 东京10, server: 47.74.14.116, port: 28264, type: vmess, uuid: 98915962-c5bd-43bb-c432-f1e58d12e811, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /98915962}}
+  - {name: vmess+ws 2, server: 23.185.200.94, port: 12184, type: vmess, uuid: 3df14a7a-0dbe-426e-da37-bf8c17de55ae, alterId: 0, cipher: auto, tls: false, network: ws, ws-opts: {path: /3df14a7a}}
+  - {name: " 3", server: x.knus.ltd, port: 2053, type: vmess, uuid: b7846852-201d-4bfe-9b5a-54d4f3dbbb64, alterId: 0, cipher: auto, tls: true, network: ws, ws-opts: {path: /tyuhjkl, headers: {Host: x.knus.ltd}}}
+  - {name: " 4", server: 54.164.221.66, port: 55474, type: vmess, uuid: 88f22ff9-712c-4c80-87cf-67869ff5bb92, alterId: 0, cipher: auto, tls: false}
+  - {name: 阿火电脑2, server: 47.236.153.165, port: 11423, type: vless, uuid: e91ddf47-8726-45e9-9617-3acf9de2351e, tls: false, network: tcp}
+  - {name: " 5", server: 103.248.229.11, port: 29225, type: vmess, uuid: 59174619-5f6b-416b-e63a-c33bb0c78b8c, alterId: 0, cipher: auto, tls: false}

@@ -134,3 +134,9 @@ config.yaml
 generate.ini
 subscribe/config/config.json
 config.local.json
+
+.idea
+logs
+data
+config/.env
+ssrspeed/resources
