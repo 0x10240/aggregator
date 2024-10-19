@@ -8,7 +8,7 @@ tqdm
 simplejson
 loguru
 psutil
-yaml
+PyYAML
 redis
 pandas
 apscheduler
