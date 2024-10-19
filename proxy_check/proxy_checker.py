@@ -101,7 +101,7 @@ def sync_check_port(port: int):
 class Checker:
     def __init__(self):
         self.tmp_dir = os.path.join(current_dir, 'tmp')
-        self._debug = False
+        self._debug = True
         self._results = []
         self._connection = 50
 
@@ -148,12 +148,14 @@ class Checker:
 
         await test_method(proxy)
 
-    async def allcate_proxies_ports(self, proxies):
+    async def allocate_proxies_ports(self, proxies):
         port = LOCAL_PORT
         for proxy in proxies:
             while not await is_port_available(port):
+                logger.info(f'port: {port} is not available now.')
                 port += 1
             proxy['local_port'] = port
+            logger.info(f'allocate port:{port} to proxy: {proxy.get("name")}')
             port += 1
 
     @staticmethod
@@ -189,7 +191,7 @@ class Checker:
         lock = asyncio.Lock()
         dic = {"done_nodes": 0, "total_nodes": len(proxies)}
 
-        await self.allcate_proxies_ports(proxies)
+        await self.allocate_proxies_ports(proxies)
 
         name = asyncio.current_task().get_name()
         config_file_path = os.path.join(self.tmp_dir, f"{name}.yml")
@@ -275,12 +277,12 @@ class Checker:
         return self._results
 
     async def main(self):
-        await self.allcate_proxies_ports([{} for _ in range(self._connection)])
+        await self.allocate_proxies_ports([{} for _ in range(self._connection)])
 
 
 if __name__ == '__main__':
     checker = Checker()
-    #asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(checker.main())
     for x in checker.get_result():
         print(x)

@@ -12,6 +12,10 @@ from ssrspeed.core import SSRSpeedCore
 from proxy_db.db_client import DbClient
 from config import redis_conn
 
+"""
+通过 ssrspeed 检测订阅代理
+速度太慢， 代码已经废弃
+"""
 
 class SubChecker:
     def __init__(self):
@@ -26,7 +30,7 @@ class SubChecker:
         test_method = 'ST_ASYNC'
         sc = SSRSpeedCore()
         sc.console_setup(test_mode, test_method, url=url, cfg_filename=cfg_filename, clash_cfg=clash_cfg)
-        args = argparse.Namespace(debug=False, max_connections=50)
+        args = argparse.Namespace(debug=True, max_connections=50)
         result = sc.start_test_api(args)
         return result
 

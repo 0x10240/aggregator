@@ -1,4 +1,6 @@
 import os
+import re
+
 import yaml
 import time
 import random
@@ -142,6 +144,12 @@ class SubUploader:
 
         name_set = set()
         for proxy in proxies:
+            if proxy.get('type') == 'vless' and proxy.get('flow') and proxy.get('flow') != "xtls-rprx-vision":
+                proxy['flow'] = 'xtls-rprx-vision'
+
+            if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
+                proxy['cipher'] = 'chacha20-ietf-poly1305'
+
             server = domain_to_ip(proxy['server'])
             country = self.get_country_by_ip(server)
             name = f'{country}-{server}'
@@ -164,7 +172,11 @@ class SubUploader:
             proxy['name'] = new_name
 
         # 过滤掉中国节点
-        data['proxies'] = [proxy for proxy in proxies if not '中国' in proxy['name']]
+        proxies = [proxy for proxy in proxies if not '中国' in proxy['name']]
+
+        # 按ip纯净度排序
+        proxies = sorted(proxies, key=lambda x: self.get_proxy_name_iprisk(x.get('name', '')))
+        data['proxies'] = proxies
 
         src = f'{filepath}.bak'
         with open(src, 'w', encoding='utf8') as f:
@@ -172,6 +184,10 @@ class SubUploader:
 
         self.convert_to_clash(src, list_only=False)
         os.unlink(src)
+
+    def get_proxy_name_iprisk(self, proxy_name):
+        s = re.search('(\d+)%', proxy_name)
+        return int(s.group(1)) if s else 101
 
     def merge_proxies(self):
         nodes_b64 = b64plus.encode('\n'.join(self.node_links)).decode('utf-8')

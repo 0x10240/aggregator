@@ -8,7 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler, BlockingSched
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from submanager.mihomo_launcher import MiHoMoLauncher
+from submanager.mihomo_proxy_pool import MiHoMoProxyPool
 from submanager.sub_checker import SubChecker
 from submanager.xui_scan.fofa_get_xui import FofaClient
 from submanager.xui_scan.xui_sublink_checker import XuiSubLinkChecker
@@ -32,8 +32,8 @@ def check_subscript_task():
 
 def mihomo_launch_task():
     try:
-        l = MiHoMoLauncher()
-        l.start()
+        p = MiHoMoProxyPool()
+        p.start()
     except Exception as e:
         logger.exception(e)
 

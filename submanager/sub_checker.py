@@ -21,11 +21,7 @@ class SubChecker:
         if os.name == "nt":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.checker._run(proxies))
-        loop.close()
-
+        asyncio.run(self.checker._run(proxies))
         return self.checker.get_result()
 
     def pre_process_proxies(self):
@@ -41,6 +37,15 @@ class SubChecker:
             return name
 
         for proxy in self.proxies:
+            # 最新 mihomo 只支持 xtls-rprx-vision 流控算法
+            if proxy.get('type') == 'vless' and proxy.get('flow') and proxy.get('flow') != "xtls-rprx-vision":
+                proxy['flow'] = 'xtls-rprx-vision'
+                logger.warning(f'proxy: {proxy} unsupport flow')
+
+            # 转换器的问题，chacha20-poly1305 在 mihomo 要写成 chacha20-ietf-poly1305
+            if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
+                proxy['cipher'] = 'chacha20-ietf-poly1305'
+
             p = proxy.copy()
             for key in unused_keys:
                 p.pop(key, None)
