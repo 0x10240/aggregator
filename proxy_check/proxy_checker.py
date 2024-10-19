@@ -280,7 +280,7 @@ class Checker:
 
 if __name__ == '__main__':
     checker = Checker()
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    #asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(checker.main())
     for x in checker.get_result():
         print(x)

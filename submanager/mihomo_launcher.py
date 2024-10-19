@@ -15,7 +15,6 @@ from loguru import logger
 from proxy_db.db_client import DbClient
 from config import redis_conn
 
-
 """
 1. 拉取数据库中的 clash 配置
 2. 生成 mihomo 配置和 docker compose 程序
@@ -161,21 +160,22 @@ class MiHoMoLauncher:
         with open(os.path.join(current_dir, self.docker_compose_file_path), 'w', encoding='utf-8') as file:
             yaml.dump(docker_compose_dict, file, default_flow_style=False, sort_keys=False)
 
-    def restart_mihomo_docker(self):
+    def stop_mihomo_docker(self):
         stop_cmd = f"docker compose -f {self.docker_compose_file_path} down"
-        start_cmd = f"docker compose -f {self.docker_compose_file_path} up -d"
-
         stop_ret = subprocess.getoutput(stop_cmd)
         logger.info(f'stop cmd: {stop_ret} ret: {stop_ret}')
 
+    def start_mihomo_docker(self):
+        start_cmd = f"docker compose -f {self.docker_compose_file_path} up -d --remove-orphans"
         start_ret = subprocess.getoutput(start_cmd)
         logger.info(f'start cmd:{start_cmd} ret: {start_ret}')
 
     def start(self):
         self.proxies = self.get_proxies_from_db()
         self.generate_mihomo_configs()
+        self.stop_mihomo_docker()
         self.generate_docker_compose_config()
-        self.restart_mihomo_docker()
+        self.start_mihomo_docker()
 
 
 if __name__ == '__main__':

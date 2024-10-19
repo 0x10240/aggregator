@@ -1,4 +1,5 @@
 import os
+import yaml
 import signal
 import subprocess
 import platform
@@ -110,7 +111,6 @@ if __name__ == '__main__':
     m = MiHoMoClient('tmp/config.yaml')
 
     import asyncio
-    import yaml
     import time
 
     with open('clients/config.yaml', 'r', encoding='utf-8') as f:
