@@ -14,6 +14,7 @@ from config import proxy_pool_start_port
 from loguru import logger
 from proxy_db.db_client import DbClient
 from config import redis_conn
+from urllib.parse import unquote
 
 """
 1. 拉取数据库中的 clash 配置
@@ -62,10 +63,14 @@ class MiHoMoProxyPool:
             if proxy.get('type') == 'vless' and proxy.get('flow') and proxy.get('flow') != "xtls-rprx-vision":
                 proxy['flow'] = 'xtls-rprx-vision'
                 logger.warning(f'proxy: {proxy} unsupport flow')
+                continue
 
             # 转换器的问题，chacha20-poly1305 在 mihomo 要写成 chacha20-ietf-poly1305
             if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
                 proxy['cipher'] = 'chacha20-ietf-poly1305'
+
+            if proxy.get('type') == 'ss' and proxy.get('password') :
+                proxy['password'] = unquote(str(proxy['password']))
 
             fail_count = proxy.get('fail_count', 0)
             if fail_count > 0:

@@ -16,6 +16,7 @@ from proxy_db.db_client import DbClient
 from submanager.xui_scan.xui_db import XuiLinkDb
 from tools.ping0cc import get_ip_risk_score
 from config import redis_conn, github_token, clash_yaml_gist_id
+from urllib.parse import unquote
 
 """
 将订阅转换统一为clash配置文件
@@ -149,6 +150,9 @@ class SubUploader:
 
             if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
                 proxy['cipher'] = 'chacha20-ietf-poly1305'
+
+            if proxy.get('type') == 'ss' and proxy.get('password') :
+                proxy['password'] = unquote(str(proxy['password']))
 
             server = domain_to_ip(proxy['server'])
             country = self.get_country_by_ip(server)

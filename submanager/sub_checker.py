@@ -7,6 +7,7 @@ from datetime import datetime
 from proxy_db.db_client import DbClient
 from proxy_check.proxy_checker import Checker
 from config import redis_conn
+from urllib.parse import unquote
 
 
 class SubChecker:
@@ -39,12 +40,15 @@ class SubChecker:
         for proxy in self.proxies:
             # 最新 mihomo 只支持 xtls-rprx-vision 流控算法
             if proxy.get('type') == 'vless' and proxy.get('flow') and proxy.get('flow') != "xtls-rprx-vision":
-                proxy['flow'] = 'xtls-rprx-vision'
                 logger.warning(f'proxy: {proxy} unsupport flow')
+                continue
 
             # 转换器的问题，chacha20-poly1305 在 mihomo 要写成 chacha20-ietf-poly1305
             if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
                 proxy['cipher'] = 'chacha20-ietf-poly1305'
+
+            if proxy.get('type') == 'ss' and proxy.get('password') :
+                proxy['password'] = unquote(str(proxy['password']))
 
             p = proxy.copy()
             for key in unused_keys:
