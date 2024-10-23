@@ -11,22 +11,26 @@ import re
 import sys
 import time
 import traceback
+import urllib
+import random
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from subscribe.clash import is_mihomo, verify
 from xml.etree import ElementTree
 
-import push
-import utils
-import workflow
+from subscribe import push
+from subscribe import utils
+from subscribe import workflow
 import yaml
-from airport import AirPort
-from crawl import naming_task
-from executable import which_bin
-from logger import logger
-from origin import Origin
+from subscribe.airport import AirPort
+from subscribe.crawl import naming_task
+from subscribe.executable import which_bin
+from subscribe.logger import logger
+from subscribe.origin import Origin
+from subscribe import subconverter
+from subscribe.clash import QuotedStr, quoted_scalar
 
-import subconverter
-from clash import QuotedStr, quoted_scalar
+PATH = os.path.abspath(os.path.dirname(__file__))
 
 # outbind type
 SUPPORT_TYPE = ["ss", "ssr", "vmess", "trojan", "snell", "vless", "hysteria2", "hysteria", "http", "socks5"]
@@ -160,13 +164,125 @@ def list_files(base: str, date: str, maxsize: int, last: datetime) -> list[str]:
     return files
 
 
+def decode(
+        text: str, program: str, artifact: str = "", ignore: bool = False, special: bool = False,
+        throw: bool = False
+) -> list:
+    def clean_text(document: str) -> str:
+        document = utils.trim(text=document)
+        if not document:
+            return ""
+
+        url_decode = lambda m: (
+            f'"name": "{urllib.parse.unquote(m.group(1))}",'
+            if m and m.group(1)
+            else f'"name": "{utils.random_chars(6)}",'
+        )
+        document = re.sub(r'"name":(?:\s+)?"(%.*)",', url_decode, document, flags=re.I)
+
+        add_quote = lambda m: f"- '{m.group(1)}'" if m and m.group(1) else f"- '{utils.random_chars(6)}'"
+        document = re.sub(r'-\s+("?%.*"?)', add_quote, document, flags=re.I)
+
+        return document
+
+    text, nodes = utils.trim(text=text), []
+    if not text:
+        return []
+
+    if (
+            utils.isb64encode(text)
+            or (text.startswith("{") and text.endswith("}"))
+            or not re.search(r"^proxies:([\s\r\n]+)?$", text, flags=re.MULTILINE)
+    ):
+        artifact = utils.trim(text=artifact)
+        if not artifact:
+            artifact = utils.random_chars(length=6, punctuation=False)
+
+        v2ray_file = os.path.join(PATH, "subconverter", f"{artifact}.txt")
+        clash_file = os.path.join(PATH, "subconverter", f"{artifact}.yaml")
+
+        try:
+            with open(v2ray_file, "w+", encoding="UTF8") as f:
+                f.write(text)
+                f.flush()
+        except:
+            if os.path.exists(v2ray_file):
+                os.remove(v2ray_file)
+
+            logger.error(f"save file fialed, artifact: {artifact}")
+            traceback.print_exc()
+
+        generate_conf = os.path.join(PATH, "subconverter", "generate.ini")
+        success = subconverter.generate_conf(
+            generate_conf,
+            artifact,
+            f"{artifact}.txt",
+            f"{artifact}.yaml",
+            "clash",
+            True,
+            ignore,
+        )
+        if not success:
+            logger.error("cannot generate subconverter config file")
+            os.remove(v2ray_file)
+            return []
+
+        time.sleep(random.random())
+        success = subconverter.convert(binname=program, artifact=artifact)
+        logger.info(f"subconverter completed, artifact: [{artifact}]\tsuccess=[{success}]")
+
+        os.remove(v2ray_file)
+        if not success:
+            return []
+
+        with open(clash_file, "r", encoding="utf8", errors="ignore") as reader:
+            config = None
+            try:
+                config = yaml.load(reader, Loader=yaml.SafeLoader)
+            except yaml.constructor.ConstructorError:
+                reader.seek(0, 0)
+                yaml.add_multi_constructor(
+                    "str",
+                    lambda loader, suffix, node: str(node.value),
+                    Loader=yaml.SafeLoader,
+                )
+                config = yaml.load(reader, Loader=yaml.SafeLoader)
+            except Exception as e:
+                if throw:
+                    raise e
+                else:
+                    logger.error(f"cannot load yaml file, artifact: {artifact}, message:\n{traceback.format_exc()}")
+
+            nodes = [] if not config else config.get("proxies", [])
+
+        # 已经读取，可以删除
+        os.remove(clash_file)
+    else:
+        nodes = None
+        try:
+            nodes = yaml.load(text, Loader=yaml.SafeLoader).get("proxies", [])
+        except yaml.scanner.ScannerError:
+            text = clean_text(document=text)
+            nodes = yaml.load(text, Loader=yaml.SafeLoader).get("proxies", [])
+        except yaml.constructor.ConstructorError:
+            yaml.add_multi_constructor("str", lambda loader, suffix, node: str(node.value), Loader=yaml.SafeLoader)
+            nodes = yaml.load(text, Loader=yaml.FullLoader).get("proxies", [])
+        except Exception as e:
+            if throw:
+                raise e
+            else:
+                logger.error(f"cannot load yaml file, artifact: {artifact}, message:\n{traceback.format_exc()}")
+
+    return [] if not nodes else [x for x in nodes if verify(x, special)]
+
+
 def fetchone(
-    url: str,
-    nopublic: bool = True,
-    exclude: str = "",
-    ignore: str = "",
-    repeat: int = 1,
-    noproxies: bool = False,
+        url: str,
+        nopublic: bool = True,
+        exclude: str = "",
+        ignore: str = "",
+        repeat: int = 1,
+        noproxies: bool = False,
 ) -> tuple[list, list]:
     content = utils.http_get(url=url)
     if not content:
@@ -185,7 +301,7 @@ def fetchone(
         try:
             index = url.rfind("/")
             if index != -1:
-                name = url[index + 1 :]
+                name = url[index + 1:]
             else:
                 name = utils.random_chars(length=6, punctuation=False)
 
@@ -199,11 +315,11 @@ def fetchone(
 
             # detect if it contains shared proxy nodes
             if detect(
-                proxies=proxies,
-                nopublic=nopublic,
-                exclude=exclude,
-                ignore=ignore,
-                repeat=repeat,
+                    proxies=proxies,
+                    nopublic=nopublic,
+                    exclude=exclude,
+                    ignore=ignore,
+                    repeat=repeat,
             ):
                 proxies = []
             elif url.endswith(".json"):
@@ -225,7 +341,7 @@ def fetch(params: dict) -> list:
     if not params or type(params) != dict:
         return []
 
-    domain = utils.extract_domain(params.get("url", ""), include_protocal=True)
+    domain = utils.extract_domain(params.get("url", ""), include_protocol=True)
     if not domain:
         logger.error(f"[V2RaySE] skip collect data due to parameter 'url' missing")
         return []

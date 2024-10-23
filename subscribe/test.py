@@ -1,34 +1,61 @@
+import httpx
 import requests
+from submanager.util import get_http_proxies
+import re
 
-# 替换为你的 GitHub token
-token = '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'
-# Gist 文件的内容
-file_content = '''# Hello Gist
-This is a sample file content.'''
 
-# Gist 数据
-data = {
-    'description': 'Sample Gist',
-    'public': True,  # 设置为 True 以公开 Gist，设置为 False 以私有
-    'files': {
-        'sample_file.txt': {
-            'content': file_content
+class Emailnator:
+    def __init__(self):
+        self.base_url = 'https://www.emailnator.com/'
+        self.session = requests.Session()
+        self.session.proxies = get_http_proxies()
+
+        self.session.headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Host': 'www.emailnator.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0'
         }
-    }
-}
 
-# 请求头
-headers = {
-    'Authorization': f'token {token}',
-    'Accept': 'application/vnd.github.v3+json'
-}
+        self.session.get(self.base_url)
 
-# 创建 Gist
-response = requests.post('https://gist.github.com/0x10240/4b1edb15f7aeb64c29a45674fc3e4e9d', json=data, headers=headers)
+        self.session.headers['Accept'] = 'application/json, text/plain, */*'
+        self.session.headers['Content-Type'] = 'application/json'
+        self.session.headers['Origin'] = self.base_url.rstrip('/')
+        self.session.headers['Referer'] = self.base_url
+        self.session.headers['X-XSRF-TOKEN'] = str(self.session.cookies['XSRF-TOKEN']).replace('%3D', '=')
 
-# 检查响应
-if response.status_code == 201:
-    print('Gist created successfully!')
-    print('Gist URL:', response.json()['html_url'])
-else:
-    print('Failed to create Gist:', response.text)
+    def generate_mail(self, mail_type: list = None):
+        mail_json = {'email': ['dotGmail', 'plusGmail'] if mail_type is None else mail_type}
+        mail = self.session.post(self.base_url + 'generate-email', json=mail_json).json()['email'][0]
+        return mail
+
+    def get_verification_link(self, mail: str):
+        while True:
+            response = self.session.post(self.base_url + 'message-list', json={'email': mail})
+            messges_id = response.json()['messageData']
+            total_messeges = len(messges_id)
+
+            for i in range(total_messeges):
+                if len(str(messges_id[i]['messageID'])) > 12:
+                    messges_id_base = messges_id[i]['messageID']
+                    url_email = 'https://www.emailnator.com/message-list'
+
+                    payload = {
+                        'email': mail,
+                        'messageID': messges_id_base
+                    }
+
+                    message = self.session.post(url_email, json=payload)
+                    if "https://wl.spotify.com/" in message.text:
+                        pattern = re.compile(r'https?://wl\.spotify\.com/ls/click\?.*')
+                        verification_url = re.findall(pattern, message.text)[0].split('"')[0]
+                        return verification_url
+                    else:
+                        continue
+
+
+if __name__ == '__main__':
+    print(Emailnator().generate_mail())

@@ -147,7 +147,7 @@ def order(url: str, params: dict, headers: dict, retry: int = 3) -> str:
         return trade_no
 
     except Exception as e:
-        logger.error(e)
+        logger.error(f'{url} order failed, err: {e}')
         retry -= 1
 
         if retry > 0:
@@ -209,12 +209,12 @@ def payment(url: str, params: dict, headers: dict, retry: int = 3) -> bool:
 
 
 def checkout(
-    domain: str,
-    coupon: str,
-    headers: dict,
-    planid: int = -1,
-    retry: int = 3,
-    link: str = "",
+        domain: str,
+        coupon: str,
+        headers: dict,
+        planid: int = -1,
+        retry: int = 3,
+        link: str = "",
 ) -> dict:
     if utils.isblank(domain) or utils.isblank(coupon):
         return {}
@@ -326,11 +326,11 @@ def close_ticket(domain: str, tid: int, headers: dict, retry: int = 3) -> bool:
 
 
 def submit_ticket(
-    domain: str,
-    cookies: str,
-    ticket: dict,
-    authorization: str = "",
-    retry: int = 3,
+        domain: str,
+        cookies: str,
+        ticket: dict,
+        authorization: str = "",
+        retry: int = 3,
 ) -> bool:
     if retry <= 0:
         logger.error(f"[TicketError] achieved max retry when submit ticket, domain: {domain}")
@@ -550,13 +550,13 @@ def get_subscribe_info(domain: str, cookies: str, authorization: str = "", retry
 
 
 def flow(
-    domain: str,
-    params: dict,
-    reset: bool = False,
-    retry: int = 3,
-    headers: dict = HEADER,
-    cookies: str = "",
-    authorization: str = "",
+        domain: str,
+        params: dict,
+        reset: bool = False,
+        retry: int = 3,
+        headers: dict = HEADER,
+        cookies: str = "",
+        authorization: str = "",
 ) -> bool:
     domain = domain.strip()
     regex = "(?i)^(https?:\\/\\/)?(www.)?([^\\/]+\\.[^.]*$)"
@@ -688,12 +688,12 @@ def add_traffic_flow(domain: str, params: dict) -> str:
             )
 
         subscribe.renew_enable = subscribe.renew_enable and (
-            not utils.isblank(package) or not utils.isblank(coupon_code)
+                not utils.isblank(package) or not utils.isblank(coupon_code)
         )
         if (
-            renew
-            and subscribe.renew_enable
-            and (subscribe.expired_days <= 5 or (not subscribe.reset_enable and subscribe.used_rate >= 0.8))
+                renew
+                and subscribe.renew_enable
+                and (subscribe.expired_days <= 5 or (not subscribe.reset_enable and subscribe.used_rate >= 0.8))
         ):
             success = flow(
                 domain=domain,
@@ -715,8 +715,8 @@ def add_traffic_flow(domain: str, params: dict) -> str:
             autoreset = ticket.pop("autoreset", False)
             # 过期时间 <= 5 或者 流量使用例 >= 0.8 或者 重置日期 <= 1 且不会自动重置时提交工单
             if enable and (
-                (subscribe.expired_days <= 5 or subscribe.used_rate >= 0.8)
-                or (not autoreset and subscribe.reset_day <= 1)
+                    (subscribe.expired_days <= 5 or subscribe.used_rate >= 0.8)
+                    or (not autoreset and subscribe.reset_day <= 1)
             ):
                 success = submit_ticket(
                     domain=domain,

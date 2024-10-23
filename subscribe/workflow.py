@@ -74,10 +74,10 @@ class TaskConfig:
     special_protocols: bool = False
 
     # 对于具有邮箱域名白名单且需要验证码的情况，是否使用 Gmail 别名邮箱尝试，为 True 时表示不使用
-    rigid: bool = True
+    use_gmail_alias: bool = True
 
     # 是否丢弃可能需要人机验证的站点
-    chuck: bool = False
+    skip_captcha_site: bool = True
 
     # 邀请码
     invite_code: str = ""
@@ -87,50 +87,39 @@ def execute(task_conf: TaskConfig) -> list:
     if not task_conf or not isinstance(task_conf, TaskConfig):
         return []
 
-    obj = AirPort(
-        name=task_conf.name,
-        site=task_conf.domain,
-        sub=task_conf.sub,
-        rename=task_conf.rename,
-        exclude=task_conf.exclude,
-        include=task_conf.include,
-        liveness=task_conf.liveness,
-        coupon=task_conf.coupon,
-    )
+    try:
+        obj = AirPort(
+            name=task_conf.name,
+            site=task_conf.domain,
+            sub=task_conf.sub,
+            coupon=task_conf.coupon,
+        )
 
-    logger.info(f"start fetch proxy: name=[{task_conf.name}]\tid=[{task_conf.index}]\tdomain=[{obj.ref}]")
+        logger.info(f"start fetch proxy: name=[{task_conf.name}]\tid=[{task_conf.index}]\tdomain=[{obj.ref}]")
 
-    # 套餐续期
-    if task_conf.renew:
-        sub_url = renewal.add_traffic_flow(domain=obj.ref, params=task_conf.renew)
-        if sub_url and not obj.registed:
-            obj.registed = True
-            obj.sub = sub_url
+        # 套餐续期
+        if task_conf.renew:
+            sub_url = renewal.add_traffic_flow(domain=obj.ref, params=task_conf.renew)
+            if sub_url and not obj.registed:
+                obj.registed = True
+                obj.sub = sub_url
 
-    cookie, authorization = obj.get_subscribe(
-        retry=task_conf.retry,
-        rigid=task_conf.rigid,
-        chuck=task_conf.chuck,
-        invite_code=task_conf.invite_code,
-    )
+        obj.get_subscribe(
+            retry=task_conf.retry,
+            skip_captcha_site=task_conf.skip_captcha_site,
+            invite_code=task_conf.invite_code,
+        )
 
-    proxies = obj.parse(
-        cookie=cookie,
-        auth=authorization,
-        retry=task_conf.retry,
-        rate=task_conf.rate,
-        bin_name=task_conf.bin_name,
-        tag=task_conf.tag,
-        disable_insecure=task_conf.disable_insecure,
-        ignore_exclude=task_conf.ignorede,
-        chatgpt=task_conf.chatgpt,
-        special_protocols=task_conf.special_protocols,
-    )
+        proxies = obj.parse_proxies()
 
-    logger.info(
-        f"finished fetch proxy: name=[{task_conf.name}]\tid=[{task_conf.index}]\tdomain=[{obj.ref}]\tcount=[{len(proxies)}]"
-    )
+        logger.info(
+            f"finished fetch proxy: name=[{task_conf.name}]\tid=[{task_conf.index}]\tdomain=[{obj.ref}]\tcount=[{len(proxies)}]"
+        )
+    except Exception as e:
+        logger.exception(f'{task_conf.domain} get subscribe failed, err: {e}')
+        return []
 
+    obj.update_to_db()
     return proxies
 
 

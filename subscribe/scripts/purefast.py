@@ -155,7 +155,7 @@ def get_cookie(text: str) -> str:
 
 
 def run(domain: str, params: dict, timeout: int) -> bool:
-    domain = utils.extract_domain(url=domain, include_protocal=True)
+    domain = utils.extract_domain(url=domain, include_protocol=True)
     if not domain:
         logger.error(f"[PFVPNError] cannot checkin because domain: {domain} is invalidate")
         return False

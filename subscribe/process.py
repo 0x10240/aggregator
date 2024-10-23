@@ -29,8 +29,8 @@ from logger import logger
 from origin import Origin
 from workflow import TaskConfig
 
-import clash
-import subconverter
+from subscribe import clash
+from subscribe import subconverter
 
 PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
@@ -321,7 +321,7 @@ def assign(
     remain: bool,
     pushtool: push.PushTo,
     only_check=False,
-    rigid: bool = True,
+    use_gmail_alias: bool = True,
 ) -> tuple[list[TaskConfig], dict, list]:
     if not isinstance(pc, ProcessConfig):
         return [], {}, []
@@ -397,7 +397,7 @@ def assign(
         ignoreder = site.get("ignorede", False)
 
         # 需要人机验证时是否直接放弃
-        chuck = site.get("chuck", False)
+        skip_captcha_site = site.get("skip_captcha_site", False)
 
         if not source:
             source = Origin.TEMPORARY.name if not domain else Origin.OWNED.name
@@ -446,8 +446,8 @@ def assign(
                 coupon=coupon,
                 disable_insecure=disable_insecure,
                 ignorede=ignoreder,
-                rigid=rigid,
-                chuck=chuck,
+                use_gmail_alias=use_gmail_alias,
+                skip_captcha_site=skip_captcha_site,
                 special_protocols=special_protocols,
                 invite_code=invite_code,
             )
@@ -527,7 +527,7 @@ def aggregate(args: argparse.Namespace) -> None:
         remain=not args.overwrite,
         pushtool=pushtool,
         only_check=args.check,
-        rigid=not args.flexible,
+        use_gmail_alias=not args.flexible,
     )
     if not tasks:
         logger.error("cannot found any valid config, exit")

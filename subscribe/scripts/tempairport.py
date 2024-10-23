@@ -6,20 +6,47 @@
 import json
 from copy import deepcopy
 
-import push
-import utils
-from airport import AirPort, issspanel
-from crawl import is_available
-from logger import logger
-from urlvalidator import isurl
+import urllib.request
+
+from subscribe import push
+from subscribe import utils
+from subscribe.airport import AirPort
+from subscribe.crawl import is_available
+from subscribe.logger import logger
+from subscribe.urlvalidator import isurl
 
 from . import commons, scaner
 
 
+class NoRedirHandler(urllib.request.HTTPRedirectHandler):
+    def http_error_302(self, req, fp, code, msg, headers):
+        return fp
+
+    http_error_301 = http_error_302
+
+
+def issspanel(domain: str) -> bool:
+    def sniff(url: str) -> int:
+        if utils.isblank(url):
+            return -1
+
+        try:
+            opener = urllib.request.build_opener(NoRedirHandler)
+            opener.addheaders = [("User-Agent", utils.USER_AGENT)]
+            response = opener.open(fullurl=url, timeout=10)
+            return response.getcode()
+        except Exception:
+            return -2
+
+    url = f"{domain}/api/v1/passport/auth/login"
+    return False if sniff(url=url) == 200 else sniff(url=f"{domain}/auth/login") == 200
+
+
 def register(
-    domain: str, subtype: int = 1, coupon: str = "", rigid: bool = True, chuck: bool = False, invite_code: str = ""
+        domain: str, subtype: int = 1, coupon: str = "", use_gmail_alias: bool = True, skip_captcha_site: bool = False,
+        invite_code: str = ""
 ) -> AirPort:
-    url = utils.extract_domain(url=domain, include_protocal=True)
+    url = utils.extract_domain(url=domain, include_protocol=True)
     if not isurl(url=url):
         logger.error(f"[TempSubError] cannot register because domain=[{domain}] is invalidate")
         return None
@@ -37,7 +64,8 @@ def register(
         airport.password = passwd
         airport.sub = suburl
     else:
-        airport.get_subscribe(retry=3, rigid=rigid, chuck=chuck, invite_code=invite_code)
+        airport.get_subscribe(retry=3, use_gmail_alias=use_gmail_alias, skip_captcha_site=skip_captcha_site,
+                              invite_code=invite_code)
 
     return airport
 
@@ -114,7 +142,7 @@ def fetchsub(params: dict) -> list:
             item.update(subscribe.get("config"))
 
         if utils.isblank(item.get("name", "")):
-            item["name"] = utils.extract_domain(url=item["sub"], include_protocal=False).replace(".", "-")
+            item["name"] = utils.extract_domain(url=item["sub"], include_protocol=False).replace(".", "-")
         item["push_to"] = list(set(item.get("push_to", [])))
         item["saved"] = True
         results.append(item)
@@ -152,11 +180,12 @@ def load(engine: str, persist: dict, retry: bool = False) -> tuple[dict, list, d
                         exists[k] = v
                     else:
                         coupon = v.get("coupon", "")
-                        rigid = v.get("rigid", True)
-                        chuck = v.get("chuck", False)
+                        use_gmail_alias = v.get("use_gmail_alias", True)
+                        skip_captcha_site = v.get("skip_captcha_site", False)
                         invite_code = v.get("invite_code", "")
 
-                        unregisters.append([k, v.get("type", 1), coupon, rigid, chuck, invite_code])
+                        unregisters.append(
+                            [k, v.get("type", 1), coupon, use_gmail_alias, skip_captcha_site, invite_code])
 
                     unknowns.pop(k, None)
 

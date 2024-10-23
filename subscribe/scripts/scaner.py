@@ -312,7 +312,7 @@ def filter_task(tasks: dict) -> list:
 
     configs = []
     for k, v in tasks.items():
-        domain = utils.extract_domain(k, include_protocal=True)
+        domain = utils.extract_domain(k, include_protocol=True)
         if not domain or type(v) != dict or not v.pop("enable", True):
             continue
 

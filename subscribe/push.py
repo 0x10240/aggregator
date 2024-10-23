@@ -473,7 +473,7 @@ def get_instance(engine: str) -> PushTo:
             if not isurl(url=subscription):
                 engine = LOCAL_STORAGE
             else:
-                domain = utils.extract_domain(url=subscription, include_protocal=False)
+                domain = utils.extract_domain(url=subscription, include_protocol=False)
                 for k, v in ENGINE_MAPPING.items():
                     if domain == v:
                         engine = k

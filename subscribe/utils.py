@@ -3,7 +3,7 @@
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
 
-import gzip
+import requests
 import json
 import multiprocessing
 import os
@@ -16,7 +16,6 @@ import string
 import subprocess
 import sys
 import time
-import traceback
 import typing
 import urllib
 import urllib.error
@@ -25,27 +24,26 @@ import urllib.request
 import uuid
 from concurrent import futures
 from http.client import HTTPMessage, HTTPResponse
+from datetime import datetime, timezone, timedelta
 
 from logger import logger
 from tqdm import tqdm
 from urlvalidator import isurl
+from urllib.parse import urlencode
 
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
 CTX.verify_mode = ssl.CERT_NONE
 
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
 )
-
 
 # 本地路径协议标识
 FILEPATH_PROTOCAL = "file:///"
 
-
 # ChatGPT 标识
 CHATGPT_FLAG = "-GPT"
-
 
 DEFAULT_HTTP_HEADERS = {
     "User-Agent": USER_AGENT,
@@ -64,61 +62,42 @@ def random_chars(length: int, punctuation: bool = False) -> str:
 
 
 def http_get(
-    url: str,
-    headers: dict = None,
-    params: dict = None,
-    retry: int = 3,
-    proxy: str = "",
-    interval: float = 0,
-    timeout: float = 10,
-    trace: bool = False,
+        url: str,
+        headers: dict = None,
+        params: dict = None,
+        retry: int = 3,
+        proxy: str = "",
+        interval: int = 0,
+        timeout: int = 10,
+        trace: bool = False,
 ) -> str:
     if not isurl(url=url):
-        logger.error(f"invalid url: {url}")
+        logger.error(f"Invalid URL: {url}")
         return ""
 
     if retry <= 0:
-        logger.debug(f"achieves max retry, url={hide(url=url)}")
+        logger.debug(f"Reached max retries, url={hide(url=url)}")
         return ""
 
-    headers = DEFAULT_HTTP_HEADERS if not headers else headers
-
+    headers = headers or DEFAULT_HTTP_HEADERS
     interval = max(0, interval)
     timeout = max(1, timeout)
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+
     try:
-        url = encoding_url(url=url)
         if params and isinstance(params, dict):
-            data = urllib.parse.urlencode(params)
-            if "?" in url:
-                url += f"&{data}"
-            else:
-                url += f"?{data}"
+            url = f"{url}?{urlencode(params)}"
 
-        request = urllib.request.Request(url=url, headers=headers)
-        if proxy and (proxy.startswith("https://") or proxy.startswith("http://")):
-            host, protocal = "", ""
-            if proxy.startswith("https://"):
-                host, protocal = proxy[8:], "https"
-            else:
-                host, protocal = proxy[7:], "http"
-            request.set_proxy(host=host, type=protocal)
+        response = requests.get(url, headers=headers, proxies=proxies, timeout=timeout, verify=False)
 
-        response = urllib.request.urlopen(request, timeout=timeout, context=CTX)
-        content = response.read()
-        status_code = response.getcode()
-        try:
-            content = str(content, encoding="utf8")
-        except:
-            content = gzip.decompress(content).decode("utf8")
-        if status_code != 200:
+        if response.status_code != 200:
             if trace:
-                logger.error(f"request failed, url: {hide(url)}, code: {status_code}, message: {content}")
-
+                logger.error(f"Request failed, url: {hide(url)}, code: {response.status_code}, message: {response.text}")
             return ""
 
-        return content
-    except urllib.error.URLError as e:
-        if isinstance(e.reason, (socket.timeout, ssl.SSLError)):
+        return response.text
+    except (requests.Timeout, requests.ConnectionError, requests.exceptions.SSLError):
+        if retry > 0:
             time.sleep(interval)
             return http_get(
                 url=url,
@@ -128,35 +107,16 @@ def http_get(
                 proxy=proxy,
                 interval=interval,
                 timeout=timeout,
+                trace=trace
             )
-        else:
-            return ""
+        return ""
     except Exception as e:
         if trace:
-            logger.error(f"request failed, url: {hide(url)}, message: \n{traceback.format_exc()}")
-
-        if isinstance(e, urllib.error.HTTPError):
-            try:
-                message = str(e.read(), encoding="utf8")
-            except:
-                message = "unknown error"
-
-            if e.code != 503 or "token" in message:
-                return ""
-
-        time.sleep(interval)
-        return http_get(
-            url=url,
-            headers=headers,
-            params=params,
-            retry=retry - 1,
-            proxy=proxy,
-            interval=interval,
-            timeout=timeout,
-        )
+            logger.error(f"Request failed, url: {hide(url)}, error: {str(e)}")
+        return ""
 
 
-def extract_domain(url: str, include_protocal: bool = False) -> str:
+def extract_domain(url: str, include_protocol: bool = False) -> str:
     if not url:
         return ""
 
@@ -168,10 +128,10 @@ def extract_domain(url: str, include_protocal: bool = False) -> str:
     if end == -1:
         end = len(url)
 
-    if include_protocal:
+    if include_protocol:
         return url[:end]
 
-    return url[start + 2 : end]
+    return url[start + 2: end]
 
 
 def extract_cookie(text: str) -> str:
@@ -235,7 +195,7 @@ def encoding_url(url: str) -> str:
 
     # 对原 url 进行替换
     for c, pc in zip(cn_chars, punycodes):
-        url = url[: url.find(c)] + pc + url[url.find(c) + len(c) :]
+        url = url[: url.find(c)] + pc + url[url.find(c) + len(c):]
 
     return url
 
@@ -353,23 +313,23 @@ def mask(url: str) -> str:
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def http_error_302(
-        self,
-        req: urllib.request.Request,
-        fp: typing.IO[bytes],
-        code: int,
-        msg: str,
-        headers: HTTPMessage,
+            self,
+            req: urllib.request.Request,
+            fp: typing.IO[bytes],
+            code: int,
+            msg: str,
+            headers: HTTPMessage,
     ) -> typing.IO[bytes]:
         return fp
 
 
 def http_post(
-    url: str,
-    headers: dict = None,
-    params: dict = {},
-    retry: int = 3,
-    timeout: float = 6,
-    allow_redirects: bool = True,
+        url: str,
+        headers: dict = None,
+        params: dict = {},
+        retry: int = 3,
+        timeout: float = 6,
+        allow_redirects: bool = True,
 ) -> HTTPResponse:
     if params is None or type(params) != dict or retry <= 0:
         return None
@@ -501,18 +461,18 @@ def multi_process_run(func: typing.Callable, tasks: list) -> list:
 
     funcname = getattr(func, "__name__", repr(func))
     logger.info(
-        f"[Concurrent] multi-process concurrent execute [{funcname}] finished, count: {len(tasks)}, cost: {time.time()-starttime:.2f}s"
+        f"[Concurrent] multi-process concurrent execute [{funcname}] finished, count: {len(tasks)}, cost: {time.time() - starttime:.2f}s"
     )
 
     return results
 
 
 def multi_thread_run(
-    func: typing.Callable,
-    tasks: list,
-    num_threads: int = None,
-    show_progress: bool = False,
-    description: str = "",
+        func: typing.Callable,
+        tasks: list,
+        num_threads: int = None,
+        show_progress: bool = False,
+        description: str = "",
 ) -> list:
     if not func or not tasks or not isinstance(tasks, list):
         return []
@@ -542,10 +502,16 @@ def multi_thread_run(
                 index = collections[future]
                 results[index] = result
             except Exception as e:
-                logger.error(f"function {funcname} execution generated an exception: {e}")
+                logger.exception(f"function {funcname} execution generated an exception: {e}")
 
     logger.info(
-        f"[Concurrent] multi-threaded execute [{funcname}] finished, count: {len(tasks)}, cost: {time.time()-starttime:.2f}s"
+        f"[Concurrent] multi-threaded execute [{funcname}] finished, count: {len(tasks)}, cost: {time.time() - starttime:.2f}s"
     )
 
     return results
+
+
+def timestamp_to_beijing_time(timestamp):
+    """Convert UNIX timestamp to Beijing time string."""
+    beijing_tz = timezone(timedelta(hours=8))
+    return datetime.fromtimestamp(timestamp, beijing_tz).strftime('%Y-%m-%d %H:%M:%S')

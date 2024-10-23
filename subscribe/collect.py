@@ -3,14 +3,18 @@
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
 
+import os
+import sys
+
+current_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, ".."))
+
 import argparse
 import itertools
-import os
 import random
-import re
 import shutil
 import subprocess
-import sys
 import time
 
 import crawl
@@ -21,163 +25,55 @@ import workflow
 import yaml
 from airport import AirPort
 from logger import logger
-from urlvalidator import isurl
 from workflow import TaskConfig
 
-import clash
-import subconverter
+from subscribe import clash
+from subscribe import subconverter
+from subscribe.airport_db import AirportDb
 
-PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
-DATA_BASE = os.path.join(PATH, "data")
+DATA_BASE = os.path.join(current_dir, "data")
+
+db_client = AirportDb()
+
+
+def load_exist_airports_from_db():
+    ret = db_client.get_all_items()
+    return ret
 
 
 def assign(
-    bin_name: str,
-    domains_file: str = "",
-    overwrite: bool = False,
-    pages: int = sys.maxsize,
-    rigid: bool = True,
-    display: bool = True,
-    num_threads: int = 0,
-    **kwargs,
+        bin_name: str,
+        overwrite: bool = False,
+        pages: int = sys.maxsize,
+        use_gmail_alias: bool = True,
+        display: bool = True,
+        num_threads: int = 0,
+        **kwargs,
 ) -> list[TaskConfig]:
-    def load_exist(username: str, gist_id: str, access_token: str, filename: str) -> list[str]:
-        if not filename:
-            return []
-
-        subscriptions = set()
-
-        pattern = r"^https?:\/\/[^\s]+"
-        local_file = os.path.join(DATA_BASE, filename)
-        if os.path.exists(local_file) and os.path.isfile(local_file):
-            with open(local_file, "r", encoding="utf8") as f:
-                items = re.findall(pattern, str(f.read()), flags=re.M)
-                if items:
-                    subscriptions.update(items)
-
-        if username and gist_id and access_token:
-            push_tool = push.PushToGist(token=access_token)
-            url = push_tool.raw_url(push_conf={"username": username, "gistid": gist_id, "filename": filename})
-
-            content = utils.http_get(url=url, timeout=30)
-            items = re.findall(pattern, content, flags=re.M)
-            if items:
-                subscriptions.update(items)
-
-        logger.info("start checking whether existing subscriptions have expired")
-
-        # 过滤已过期订阅并返回
-        links = list(subscriptions)
-        results = utils.multi_thread_run(
-            func=crawl.check_status,
-            tasks=links,
-            num_threads=num_threads,
-            show_progress=display,
-        )
-
-        return [links[i] for i in range(len(links)) if results[i][0] and not results[i][1]]
-
-    def parse_domains(content: str) -> dict:
-        if not content or not isinstance(content, str):
-            logger.warning("cannot found any domain due to content is empty or not string")
-            return {}
-
-        records = {}
-        for line in content.split("\n"):
-            line = utils.trim(line)
-            if not line or line.startswith("#"):
-                continue
-
-            words = line.rsplit(delimiter, maxsplit=2)
-            address = utils.trim(words[0])
-            coupon = utils.trim(words[1]) if len(words) > 1 else ""
-            invite_code = utils.trim(words[2]) if len(words) > 2 else ""
-
-            records[address] = {"coupon": coupon, "invite_code": invite_code}
-
-        return records
-
-    subscribes_file = utils.trim(kwargs.get("subscribes_file", ""))
-    access_token = utils.trim(kwargs.get("access_token", ""))
-    gist_id = utils.trim(kwargs.get("gist_id", ""))
-    username = utils.trim(kwargs.get("username", ""))
-    chuck = kwargs.get("chuck", False)
+    skip_captcha_site = kwargs.get("skip_captcha_site", False)
 
     # 加载已有订阅
-    subscriptions = load_exist(username, gist_id, access_token, subscribes_file)
-    logger.info(f"load exists subscription finished, count: {len(subscriptions)}")
+    exist_airports = load_exist_airports_from_db()
 
-    # 是否允许特殊协议
-    special_protocols = AirPort.enable_special_protocols()
-
-    tasks = (
-        [
-            TaskConfig(name=utils.random_chars(length=8), sub=x, bin_name=bin_name, special_protocols=special_protocols)
-            for x in subscriptions
-            if x
-        ]
-        if subscriptions
-        else []
+    candidates = crawl.collect_airport(
+        channel="jichang_list",
+        page_num=pages,
+        num_thread=num_threads,
+        show_progress=display,
+        skip_captcha_site=skip_captcha_site,
     )
 
-    # 仅更新已有订阅
-    if tasks and kwargs.get("refresh", False):
-        logger.info("skip registering new accounts, will use existing subscriptions for refreshing")
-        return tasks
+    new_items = {}
+    for site, coupon in candidates.items():
+        if not overwrite and site in exist_airports:
+            logger.info(f"Skipping {site} because it already exists")
+            continue
+        new_items[site] = {"coupon": coupon}
 
-    domains, delimiter = {}, "@#@#"
-    domains_file = utils.trim(domains_file)
-    if not domains_file:
-        domains_file = "domains.txt"
-
-    # 加载已有站点列表
-    fullpath = os.path.join(DATA_BASE, domains_file)
-    if os.path.exists(fullpath) and os.path.isfile(fullpath):
-        with open(fullpath, "r", encoding="UTF8") as f:
-            domains.update(parse_domains(content=str(f.read())))
-
-    # 爬取新站点列表
-    if not domains or overwrite:
-        candidates = crawl.collect_airport(
-            channel="jichang_list",
-            page_num=pages,
-            num_thread=num_threads,
-            rigid=rigid,
-            display=display,
-            filepath=os.path.join(DATA_BASE, "coupons.txt"),
-            delimiter=delimiter,
-            chuck=chuck,
-        )
-
-        if candidates:
-            for k, v in candidates.items():
-                item = domains.get(k, {})
-                item["coupon"] = v
-
-                domains[k] = item
-
-            overwrite = True
-
-    # 加载自定义机场列表
-    customize_link = utils.trim(kwargs.get("customize_link", ""))
-    if customize_link:
-        if isurl(customize_link):
-            domains.update(parse_domains(content=utils.http_get(url=customize_link)))
-        else:
-            local_file = os.path.join(DATA_BASE, customize_link)
-            if local_file != fullpath and os.path.exists(local_file) and os.path.isfile(local_file):
-                with open(local_file, "r", encoding="UTF8") as f:
-                    domains.update(parse_domains(content=str(f.read())))
-
-    if not domains:
-        logger.error("cannot collect any new airport for free use")
-        return tasks
-
-    if overwrite:
-        crawl.save_candidates(candidates=domains, filepath=fullpath, delimiter=delimiter)
-
-    for domain, param in domains.items():
+    tasks = []
+    special_protocols = AirPort.enable_special_protocols()
+    for domain, param in new_items.items():
         name = crawl.naming_task(url=domain)
         tasks.append(
             TaskConfig(
@@ -186,8 +82,8 @@ def assign(
                 coupon=param.get("coupon", ""),
                 invite_code=param.get("invite_code", ""),
                 bin_name=bin_name,
-                rigid=rigid,
-                chuck=chuck,
+                use_gmail_alias=use_gmail_alias,
+                skip_captcha_site=skip_captcha_site,
                 special_protocols=special_protocols,
             )
         )
@@ -214,14 +110,13 @@ def aggregate(args: argparse.Namespace) -> None:
 
     tasks = assign(
         bin_name=subconverter_bin,
-        domains_file="domains.txt",
         overwrite=args.overwrite,
         pages=args.pages,
-        rigid=not args.easygoing,
+        use_gmail_alias=not args.easygoing,
         display=display,
         num_threads=args.num,
         refresh=args.refresh,
-        chuck=args.chuck,
+        skip_captcha_site=args.skip_captcha_site,
         username=username,
         gist_id=gist_id,
         access_token=access_token,
@@ -237,7 +132,7 @@ def aggregate(args: argparse.Namespace) -> None:
     old_subscriptions = set([t.sub for t in tasks if t.sub])
 
     logger.info(f"start generate subscribes information, tasks: {len(tasks)}")
-    generate_conf = os.path.join(PATH, "subconverter", "generate.ini")
+    generate_conf = os.path.join(current_dir, "subconverter", "generate.ini")
     if os.path.exists(generate_conf) and os.path.isfile(generate_conf):
         os.remove(generate_conf)
 
@@ -248,7 +143,7 @@ def aggregate(args: argparse.Namespace) -> None:
         logger.error("exit because cannot fetch any proxy node")
         sys.exit(0)
 
-    nodes, workspace = [], os.path.join(PATH, "clash")
+    nodes, workspace = [], os.path.join(current_dir, "clash")
 
     if args.skip:
         nodes = clash.filter_proxies(proxies).get("proxies", [])
@@ -312,7 +207,7 @@ def aggregate(args: argparse.Namespace) -> None:
     # 如果文件夹不存在则创建
     os.makedirs(DATA_BASE, exist_ok=True)
 
-    supplier = os.path.join(PATH, "subconverter", source)
+    supplier = os.path.join(current_dir, "subconverter", source)
     if os.path.exists(supplier) and os.path.isfile(supplier):
         os.remove(supplier)
 
@@ -340,7 +235,7 @@ def aggregate(args: argparse.Namespace) -> None:
 
         if subconverter.convert(binname=subconverter_bin, artifact=t[0]):
             filepath = os.path.join(DATA_BASE, t[1])
-            shutil.move(os.path.join(PATH, "subconverter", t[1]), filepath)
+            shutil.move(os.path.join(current_dir, "subconverter", t[1]), filepath)
 
             records[t[1]] = filepath
 
@@ -377,7 +272,7 @@ def aggregate(args: argparse.Namespace) -> None:
         logger.info(f"filter subscriptions finished, total: {total}, found: {len(urls)}, discard: {discard}")
 
     utils.write_file(filename=os.path.join(DATA_BASE, subscribes_file), lines=urls)
-    domains = [utils.extract_domain(url=x, include_protocal=True) for x in urls]
+    domains = [utils.extract_domain(url=x, include_protocol=True) for x in urls]
 
     # 保存实际可使用的网站列表
     utils.write_file(filename=os.path.join(DATA_BASE, "valid-domains.txt"), lines=list(set(domains)))
@@ -441,10 +336,10 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-c",
-        "--chuck",
-        dest="chuck",
+        "--skip_captcha_site",
+        dest="skip_captcha_site",
         action="store_true",
-        default=False,
+        default=True,
         help="discard candidate sites that may require human-authentication",
     )
 
@@ -561,7 +456,7 @@ if __name__ == "__main__":
         "--targets",
         nargs="+",
         choices=subconverter.CONVERT_TARGETS,
-        default=["clash", "v2ray", "singbox"],
+        default=["clash"],
         help=f"choose one or more generated profile type. default to clash, v2ray and singbox. supported: {subconverter.CONVERT_TARGETS}",
     )
 
