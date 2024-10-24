@@ -54,9 +54,6 @@ class DbClient:
     def put(self, key, val, **kwargs):
         return self.client.put(key, val, **kwargs)
 
-    def update(self, key, value, **kwargs):
-        return self.client.update(key, value, **kwargs)
-
     def delete(self, key, **kwargs):
         return self.client.delete(key, **kwargs)
 

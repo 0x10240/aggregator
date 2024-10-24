@@ -26,7 +26,6 @@ class RedisClient(object):
         :param db: db
         :return:
         """
-        self.name = 'sub_proxy'
         kwargs.pop("username", None)
         self.__conn = Redis(connection_pool=BlockingConnectionPool(decode_responses=True,
                                                                    timeout=5,
@@ -75,14 +74,6 @@ class RedisClient(object):
         :return:
         """
         return self.__conn.hexists(self.name, proxy_str)
-
-    def update(self, proxy_obj):
-        """
-        更新 proxy 属性
-        :param proxy_obj:
-        :return:
-        """
-        return self.__conn.hset(self.name, proxy_obj.proxy, proxy_obj.to_json)
 
     def get_all(self):
         """

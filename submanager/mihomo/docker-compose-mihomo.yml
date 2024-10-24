@@ -1,133 +1,49 @@
 services:
-  mihomo_42151_42160:
-    container_name: mihomo_42151_42160
-    build: .
+  mihomo_42257_42288:
+    container_name: mihomo_42257_42288
     restart: always
     network_mode: host
     volumes:
     - type: bind
       bind:
         propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42151_42160.yml
+      source: D:\Codes\pythonCodes\aggregator\submanager\mihomo\configs\mihomo_42257_42288.yml
       target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42101_42138:
-    container_name: mihomo_42101_42138
-    build: .
+    image: metacubex/mihomo
+    command: -f /etc/mihomo/config.yaml
+  mihomo_42288_42290:
+    container_name: mihomo_42288_42290
     restart: always
     network_mode: host
     volumes:
     - type: bind
       bind:
         propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42101_42138.yml
+      source: D:\Codes\pythonCodes\aggregator\submanager\mihomo\configs\mihomo_42288_42290.yml
       target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42051_42101:
-    container_name: mihomo_42051_42101
-    build: .
+    image: metacubex/mihomo
+    command: -f /etc/mihomo/config.yaml
+  mihomo_42290_42335:
+    container_name: mihomo_42290_42335
     restart: always
     network_mode: host
     volumes:
     - type: bind
       bind:
         propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42051_42101.yml
+      source: D:\Codes\pythonCodes\aggregator\submanager\mihomo\configs\mihomo_42290_42335.yml
       target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42151_42201:
-    container_name: mihomo_42151_42201
-    build: .
+    image: metacubex/mihomo
+    command: -f /etc/mihomo/config.yaml
+  mihomo_42335_42390:
+    container_name: mihomo_42335_42390
     restart: always
     network_mode: host
     volumes:
     - type: bind
       bind:
         propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42151_42201.yml
+      source: D:\Codes\pythonCodes\aggregator\submanager\mihomo\configs\mihomo_42335_42390.yml
       target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42000_42050:
-    container_name: mihomo_42000_42050
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42000_42050.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42201_42251:
-    container_name: mihomo_42201_42251
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42201_42251.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42001_42051:
-    container_name: mihomo_42001_42051
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42001_42051.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42100_42137:
-    container_name: mihomo_42100_42137
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42100_42137.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42101_42151:
-    container_name: mihomo_42101_42151
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42101_42151.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42050_42100:
-    container_name: mihomo_42050_42100
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42050_42100.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
-  mihomo_42251_42266:
-    container_name: mihomo_42251_42266
-    build: .
-    restart: always
-    network_mode: host
-    volumes:
-    - type: bind
-      bind:
-        propagation: rprivate
-      source: /root/pycharm_projects/aggregator/submanager/mihomo/configs/mihomo_42251_42266.yml
-      target: /etc/mihomo/config.yaml
-    image: mihomo
+    image: metacubex/mihomo
+    command: -f /etc/mihomo/config.yaml

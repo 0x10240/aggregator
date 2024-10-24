@@ -110,7 +110,7 @@ class FofaClient:
 
 def main():
     f = FofaClient()
-    f.run(search_key='"xui" && country="US"', endcount=800)
+    f.run(search_key='"xui" && country="JP"', endcount=800)
 
 
 if __name__ == '__main__':

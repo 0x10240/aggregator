@@ -3,6 +3,7 @@ import os
 import requests
 import random
 from loguru import logger
+from config import proxy_server
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -27,7 +28,7 @@ def get_http_proxy():
         min_port, max_port = get_proxy_port_range()
         logger.info(f'proxy port range: {min_port}-{max_port}')
         port = random.randint(min_port, max_port)
-        proxy = f'http://127.0.0.1:{port}'
+        proxy = f'http://{proxy_server}:{port}'
         proxies = {"http": proxy, "https": proxy}
         headers = {"User-Agent": "curl/7.88.1"}
         try:

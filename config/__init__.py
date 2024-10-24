@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 
+
 # 获取当前文件的路径
 config_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -12,3 +13,5 @@ redis_conn = os.getenv('REDIS_CONN')
 github_token = os.getenv('GITHUB_TOKEN')
 clash_yaml_gist_id = os.getenv('CLASH_YAML_GIST_ID')
 proxy_pool_start_port = int(os.getenv('PROXY_POOL_START_PORT', 42001))
+
+proxy_server = "192.168.50.88"

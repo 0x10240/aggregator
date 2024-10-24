@@ -15,3 +15,8 @@ apscheduler
 playwright
 pyperclip
 httpx
+tenacity
+requests
+faker
+prettytable
+colorama

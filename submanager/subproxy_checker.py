@@ -9,13 +9,18 @@ from proxy_check.proxy_checker import Checker
 from config import redis_conn
 from urllib.parse import unquote
 
+"""
+检查数据库中的代理
+"""
 
-class SubChecker:
+
+class SubProxyChecker:
     def __init__(self):
         self.chunk = 50
         self.proxies = []
         self.fail_to_delete_threshold = 10
         self.db_client = DbClient(redis_conn)
+        self.db_client.change_table("sub_proxy")
 
     def check_subscribe(self, proxies):
         self.checker = Checker()
@@ -47,7 +52,7 @@ class SubChecker:
             if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
                 proxy['cipher'] = 'chacha20-ietf-poly1305'
 
-            if proxy.get('type') == 'ss' and proxy.get('password') :
+            if proxy.get('type') == 'ss' and proxy.get('password'):
                 proxy['password'] = unquote(str(proxy['password']))
 
             p = proxy.copy()
@@ -106,5 +111,5 @@ class SubChecker:
 
 
 if __name__ == '__main__':
-    checker = SubChecker()
+    checker = SubProxyChecker()
     checker.run()

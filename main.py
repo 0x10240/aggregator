@@ -4,19 +4,22 @@ from loguru import logger
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import subprocess
 from apscheduler.schedulers.background import BackgroundScheduler, BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from submanager.mihomo_proxy_pool import MiHoMoProxyPool
-from submanager.sub_checker import SubChecker
+from submanager.subproxy_checker import SubProxyChecker
 from submanager.xui_scan.fofa_get_xui import FofaClient
 from submanager.xui_scan.xui_sublink_checker import XuiSubLinkChecker
 from submanager.xui_scan.xui_scan import fetch_xui_sublink_task
 from submanager.sub_merger import SubMerger
 from submanager.merge_sub_upload import SubUploader
+from submanager.mihomo_proxy_pool import generate_proxy_pool_run_task
 
-task_scheduler = BackgroundScheduler()
+xui_task_scheduler = BackgroundScheduler()
+airport_task_scheduler = BackgroundScheduler()
+mihomo_tasl_scheduler = BackgroundScheduler()
 main_scheduler = BlockingScheduler()
 
 logger.add("logs/aggregator.log", level="INFO")
@@ -24,16 +27,8 @@ logger.add("logs/aggregator.log", level="INFO")
 
 def check_subscript_task():
     try:
-        c = SubChecker()
+        c = SubProxyChecker()
         c.run()
-    except Exception as e:
-        logger.exception(e)
-
-
-def mihomo_launch_task():
-    try:
-        p = MiHoMoProxyPool()
-        p.start()
     except Exception as e:
         logger.exception(e)
 
@@ -41,7 +36,7 @@ def mihomo_launch_task():
 def fetch_xui_task():
     try:
         f = FofaClient()
-        f.run(search_key='xui')
+        f.run(search_key='xui', endcount=100)
     except Exception as e:
         logger.exception(e)
 
@@ -70,30 +65,46 @@ def upload_task():
         logger.exception(e)
 
 
+def airport_collect_task():
+    cmd = ["/root/.virtualenvs/aggregator/bin/python", "/root/pycharm_projects/aggregator/subscribe/collect.py"]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    # 实时打印日志
+    for line in iter(process.stdout.readline, ''):
+        print(line.strip())
+
+    process.stdout.close()
+    process.wait()
+
+
 def main():
     # 检测订阅
-    task_scheduler.add_job(check_subscript_task, trigger=IntervalTrigger(minutes=30))
+    xui_task_scheduler.add_job(check_subscript_task, trigger=IntervalTrigger(minutes=30))
 
     # 拉取 xui 网站
-    task_scheduler.add_job(fetch_xui_task, trigger=IntervalTrigger(minutes=30), max_instances=10)
+    xui_task_scheduler.add_job(fetch_xui_task, trigger=IntervalTrigger(minutes=3), max_instances=10)
 
     # 检查数据库中的xui订阅链接, 删除失效链接
-    task_scheduler.add_job(xui_sublink_check_task, trigger=IntervalTrigger(hours=1))
+    xui_task_scheduler.add_job(xui_sublink_check_task, trigger=IntervalTrigger(hours=1))
 
     # 将没有处理好的 xui 网站处理获取 link
-    task_scheduler.add_job(fetch_xui_sublink_task, trigger=IntervalTrigger(hours=12))
+    xui_task_scheduler.add_job(fetch_xui_sublink_task, trigger=IntervalTrigger(hours=12))
 
     # 合并订阅链接
-    task_scheduler.add_job(sub_merge_task, trigger=CronTrigger(hour=0, minute=0))
+    xui_task_scheduler.add_job(sub_merge_task, trigger=CronTrigger(hour=0, minute=0))
 
     # 上传订阅到 github
-    task_scheduler.add_job(upload_task, trigger=IntervalTrigger(hours=12))
+    xui_task_scheduler.add_job(upload_task, trigger=IntervalTrigger(hours=12))
 
-    task_scheduler.start()
+    xui_task_scheduler.start()
 
-    print(task_scheduler.get_jobs())
+    print(xui_task_scheduler.get_jobs())
 
-    main_scheduler.add_job(mihomo_launch_task, trigger=CronTrigger(hour=6, minute=0))
+    airport_task_scheduler.add_job(airport_collect_task, trigger=IntervalTrigger(hours=2))
+    airport_task_scheduler.start()
+    print(airport_task_scheduler.get_jobs())
+
+    main_scheduler.add_job(generate_proxy_pool_run_task, trigger=IntervalTrigger(hours=6))
     main_scheduler.start()
 
 
