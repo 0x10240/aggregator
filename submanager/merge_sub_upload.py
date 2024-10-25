@@ -9,8 +9,8 @@ import requests
 from subscribe import executable
 from loguru import logger
 from subscribe import subconverter
-from ssrspeed.util import b64plus
-from ssrspeed.parser.parser import UniversalParser
+from submanager import b64plus
+from submanager.util import parse_link_host_port
 from tools.ip_location import load_mmdb
 from proxy_db.db_client import DbClient
 from submanager.xui_scan.xui_db import XuiLinkDb
@@ -94,9 +94,7 @@ class SubUploader:
             os.remove(self.generate_conf_path)
 
     def get_link_server_port(self, link):
-        parser = UniversalParser()
-        node = parser.parse_links([link])
-        server, port = node[0].config["server"], node[0].config['server_port']
+        server, port = parse_link_host_port(link)
         return server, port
 
     def load_node_links_from_db(self):
@@ -151,7 +149,7 @@ class SubUploader:
             if proxy.get('type') == 'ss' and 'poly1305' in proxy.get('cipher'):
                 proxy['cipher'] = 'chacha20-ietf-poly1305'
 
-            if proxy.get('type') == 'ss' and proxy.get('password') :
+            if proxy.get('type') == 'ss' and proxy.get('password'):
                 proxy['password'] = unquote(str(proxy['password']))
 
             server = domain_to_ip(proxy['server'])

@@ -8,7 +8,7 @@ import requests
 from subscribe import executable
 from loguru import logger
 from subscribe import subconverter
-from ssrspeed.util import b64plus
+from submanager import b64plus
 from tools.ip_location import load_mmdb
 from proxy_db.db_client import DbClient
 from submanager.xui_scan.xui_db import XuiLinkDb

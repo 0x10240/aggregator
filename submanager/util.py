@@ -1,11 +1,31 @@
 import re
 import os
+import json
 import requests
 import random
 from loguru import logger
 from config import proxy_server
+from submanager import b64plus
+from urllib.parse import urlparse
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
+
+
+def parse_link_host_port(link: str) -> tuple[str, int]:
+    link = link.strip()
+    p0, p1 = link.split('://')
+
+    if p0 == 'vmess':
+        data = json.loads(b64plus.decode(p1).decode("utf-8"))
+        return data['add'], data['port']
+
+    if p0 == 'ss':
+        p1 = p1.split('#')[0]
+        url = urlparse(f'{p0}://{b64plus.decode(p1).decode("utf-8")}')
+        return url.hostname, url.port
+
+    url = urlparse(link)
+    return url.hostname, url.port
 
 
 def get_proxy_port_range():
@@ -45,3 +65,8 @@ def get_http_proxy():
 def get_http_proxies():
     proxy = get_http_proxy()
     return {"http": proxy, "https": proxy}
+
+
+if __name__ == '__main__':
+    print(parse_link_host_port(
+        'trojan://0M89uIj4aY@91.184.241.125:48163#%E7%91%9E%E5%85%B8-91.184.241.125'))
