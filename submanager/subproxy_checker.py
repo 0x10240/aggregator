@@ -1,13 +1,9 @@
-import os
-import asyncio
-
+import json
 from loguru import logger
 from datetime import datetime
-
-from proxy_db.db_client import DbClient
-from proxy_check.proxy_checker import Checker
-from config import redis_conn
 from urllib.parse import unquote
+from submanager.proxydb import SubLinkDb
+from submanager.mihomo_speedtest import MihomoSpeedTest
 
 """
 检查数据库中的代理
@@ -19,30 +15,49 @@ class SubProxyChecker:
         self.chunk = 50
         self.proxies = []
         self.fail_to_delete_threshold = 3
-        self.db_client = DbClient(redis_conn)
-        self.db_client.change_table("sub_proxy")
+        self.db_client = SubLinkDb()
+        self.proxy_dict = self.load_proxies_dict()
 
-    def check_subscribe(self, proxies):
-        self.checker = Checker()
-        if os.name == "nt":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    def load_proxies_dict(self):
+        proxy_dict = self.db_client.get_all_items()
+        for k, v in proxy_dict.items():
+            try:
+                proxy_dict[k] = json.loads(v)
+            except Exception as e:
+                logger.error(f'convert to json failed. val: {v}')
+        return proxy_dict
 
-        asyncio.run(self.checker._run(proxies))
-        return self.checker.get_result()
+    def filter_available_proxies(self, proxies):
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        ret = []
+        chunk_size = 100
+        for proxy_chunk in chunks(proxies, chunk_size):
+            m = MihomoSpeedTest(proxies=proxy_chunk)
+            avail_proxie_names = m.filter_available_proxies()
+            for proxy in proxy_chunk:
+                if proxy["name"] not in avail_proxie_names:
+                    logger.info(f'proxy: {proxy["name"]} is not available, skipping')
+                    continue
+                ret.append(proxy)
+
+        self.proxies = ret
+        return ret
+
+    def check_proxies(self, proxies):
+        m = MihomoSpeedTest(proxies=proxies)
+        avail_proxies_names = m.filter_available_proxies()
+        for proxy in proxies:
+            if proxy["name"] in avail_proxies_names:
+                proxy['valid'] = True
+            else:
+                proxy['valid'] = False
 
     def pre_process_proxies(self):
-        unused_keys = ['fail_count', 'success_count', 'last_check_time']
-        ret = []
-        name_set = set()
-
-        def get_new_name(name, name_set):
-            i = 1
-            while name in name_set:
-                name = f'{name}-{i}'
-                i += 1
-            return name
-
-        for proxy in self.proxies:
+        for key, proxy in self.proxy_dict.items():
             # 最新 mihomo 只支持 xtls-rprx-vision 流控算法
             if proxy.get('type') == 'vless' and proxy.get('flow') and proxy.get('flow') != "xtls-rprx-vision":
                 logger.warning(f'proxy: {proxy} unsupport flow')
@@ -55,32 +70,26 @@ class SubProxyChecker:
             if proxy.get('type') == 'ss' and proxy.get('password'):
                 proxy['password'] = unquote(str(proxy['password']))
 
-            p = proxy.copy()
-            for key in unused_keys:
-                p.pop(key, None)
+            proxy["name"] = key
 
-            new_name = get_new_name(p['name'], name_set)
-            p['name'] = new_name
-            name_set.add(new_name)
-            ret.append(p)
+        return self.proxy_dict
 
-        self.proxy_dict = {f"{x['server']}:{x['port']}": x for x in self.proxies}
-        return ret
+    def get_proxy_key(self):
+        pass
 
-    def test_and_process_proxies(self):
-        proxies = self.pre_process_proxies()
-        total_proxies = len(proxies)
+    def sub_proxy_check_task(self):
+        self.pre_process_proxies()
+        proxy_items = list(self.proxy_dict.values())
+        total_proxies = len(self.proxy_dict)
         chunk_size = self.chunk
 
         for i in range(0, total_proxies, chunk_size):
-            chunk_proxies = proxies[i:i + chunk_size]
-            batch_result = self.check_subscribe(chunk_proxies)
+            chunk_proxies = proxy_items[i:i + chunk_size]
+            self.check_proxies(chunk_proxies)
 
-            for item in batch_result:
-                key = f"{item['server']}:{item['port']}"
-                proxy = self.proxy_dict[key]
-
-                if item['valid']:
+            for proxy in chunk_proxies:
+                key = proxy["name"]
+                if proxy['valid']:
                     logger.info(f"proxy: {key}, success.")
                     proxy['success_count'] = proxy.get('success_count', 0) + 1
                     proxy['fail_count'] = 0
@@ -93,23 +102,22 @@ class SubProxyChecker:
 
                 self.update_proxy(key, proxy)
 
-    def get_proxies_from_db(self):
-        proxies = self.db_client.get_all()
-        return proxies
-
     def update_proxy(self, key, proxy):
-        key = f"{proxy.get('server')}:{proxy.get('port')}"
         proxy['last_check_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.db_client.put(key, proxy)
 
     def delete_proxy(self, key):
+        logger.info(f'deleting proxy: {key}')
         return self.db_client.delete(key)
 
-    def run(self):
-        self.proxies = self.get_proxies_from_db()
-        self.test_and_process_proxies()
+
+def run_sub_proxy_check_task():
+    try:
+        s = SubProxyChecker()
+        s.sub_proxy_check_task()
+    except Exception as e:
+        logger.exception(e)
 
 
 if __name__ == '__main__':
-    s = SubProxyChecker()
-    s.run()
+    run_sub_proxy_check_task()

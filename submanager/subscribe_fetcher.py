@@ -48,6 +48,7 @@ class SubscribeFetcher:
         response.encoding = 'utf-8'
         lines = b64plus.decode(response.text).decode('utf-8').splitlines()
         proxies = convert_links(lines)
+        logger.info(f'{url} proxy num: {len(proxies)}')
         return proxies
 
     def fetch_clash_proxies(self, url):
@@ -120,7 +121,7 @@ class SubscribeFetcher:
         for proxy in all_proxies:
             server = proxy["server"]
             port = proxy["port"]
-            key = f'{server}:{port}:{proxy.get("uuid", "")}'
+            key = f'{server}:{port}'
             if key in ps:
                 logger.info(f'{proxy} exist skipping')
                 continue

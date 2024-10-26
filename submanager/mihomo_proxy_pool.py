@@ -446,7 +446,7 @@ def check_subscripts_task():
 
 def save_sub():
     s = SubscriptionPool()
-    s.save_subscription_to_db('http://blue2sea.com/clash/proxies/aiAgent/20f2f9636703f0119ec591d9fe205146')
+    s.save_subscription_to_db('https://v1210clash.pimax.com/')
 
 
 if __name__ == "__main__":

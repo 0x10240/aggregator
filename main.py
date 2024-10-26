@@ -9,7 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler, BlockingSched
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from submanager.subproxy_checker import SubProxyChecker
+from submanager.subproxy_checker import run_sub_proxy_check_task
 from submanager.xui_scan.fofa_get_xui import FofaClient
 from submanager.xui_scan.xui_sublink_checker import XuiSubLinkChecker
 from submanager.xui_scan.xui_scan import fetch_xui_sublink_task
@@ -22,14 +22,6 @@ task_scheduler = BackgroundScheduler()
 main_scheduler = BlockingScheduler()
 
 logger.add("logs/aggregator.log", level="INFO")
-
-
-def check_subscript_task():
-    try:
-        c = SubProxyChecker()
-        c.run()
-    except Exception as e:
-        logger.exception(e)
 
 
 def fetch_xui_task():
@@ -77,8 +69,8 @@ def airport_collect_task():
 
 
 def main():
-    # 检测订阅
-    task_scheduler.add_job(check_subscript_task, trigger=IntervalTrigger(minutes=30))
+    # 检测代理
+    task_scheduler.add_job(run_sub_proxy_check_task, trigger=IntervalTrigger(minutes=30))
 
     # 拉取 xui 网站
     task_scheduler.add_job(fetch_xui_task, trigger=IntervalTrigger(minutes=3), max_instances=10)
@@ -100,7 +92,6 @@ def main():
     task_scheduler.add_job(run_fetch_proxy_task, trigger=IntervalTrigger(hours=1, minutes=10))
 
     task_scheduler.start()
-
 
     print(task_scheduler.get_jobs())
 
