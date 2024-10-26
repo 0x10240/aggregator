@@ -7,8 +7,11 @@ from loguru import logger
 from config import proxy_server
 from submanager import b64plus
 from urllib.parse import urlparse
+from tools.ip_location import load_mmdb
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
+resource_dir = os.path.join(current_dir, "resource")
+mmdb_reader = load_mmdb(resource_dir, "GeoLite2-City.mmdb")
 
 
 def parse_link_host_port(link: str) -> tuple[str, int]:
@@ -62,9 +65,30 @@ def get_http_proxy():
     return None
 
 
+def get_country_by_ip(ip_address):
+    try:
+        response = mmdb_reader.city(ip_address)
+        country_name = response.country.names.get('zh-CN', '未知')
+        return country_name
+    except Exception as e:
+        return "未知"
+
+
 def get_http_proxies():
     proxy = get_http_proxy()
     return {"http": proxy, "https": proxy}
+
+
+def readlines(filepath):
+    with open(filepath, encoding='utf-8') as f:
+        lines = f.readlines()
+    ret = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        ret.append(line)
+    return ret
 
 
 if __name__ == '__main__':

@@ -719,7 +719,7 @@ class Emailnator(TemporaryMail):
                     )
 
         except Exception as e:
-            logger.exception(e)
+            logger.error(f'failed to get messages, err: {e}')
 
         return messages
 

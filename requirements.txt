@@ -20,3 +20,4 @@ requests
 faker
 prettytable
 colorama
+fake_useragent

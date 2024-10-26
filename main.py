@@ -15,11 +15,10 @@ from submanager.xui_scan.xui_sublink_checker import XuiSubLinkChecker
 from submanager.xui_scan.xui_scan import fetch_xui_sublink_task
 from submanager.sub_merger import SubMerger
 from submanager.merge_sub_upload import SubUploader
-from submanager.mihomo_proxy_pool import generate_proxy_pool_run_task
+from submanager.mihomo_proxy_pool import generate_proxy_pool_run_task, check_subscripts_task
+from submanager.subscribe_fetcher import run_fetch_proxy_task
 
-xui_task_scheduler = BackgroundScheduler()
-airport_task_scheduler = BackgroundScheduler()
-mihomo_tasl_scheduler = BackgroundScheduler()
+task_scheduler = BackgroundScheduler()
 main_scheduler = BlockingScheduler()
 
 logger.add("logs/aggregator.log", level="INFO")
@@ -79,30 +78,31 @@ def airport_collect_task():
 
 def main():
     # 检测订阅
-    xui_task_scheduler.add_job(check_subscript_task, trigger=IntervalTrigger(minutes=30))
+    task_scheduler.add_job(check_subscript_task, trigger=IntervalTrigger(minutes=30))
 
     # 拉取 xui 网站
-    xui_task_scheduler.add_job(fetch_xui_task, trigger=IntervalTrigger(minutes=3), max_instances=10)
+    task_scheduler.add_job(fetch_xui_task, trigger=IntervalTrigger(minutes=3), max_instances=10)
 
     # 检查数据库中的xui订阅链接, 删除失效链接
-    xui_task_scheduler.add_job(xui_sublink_check_task, trigger=IntervalTrigger(hours=1))
+    task_scheduler.add_job(xui_sublink_check_task, trigger=IntervalTrigger(hours=1))
 
     # 将没有处理好的 xui 网站处理获取 link
-    xui_task_scheduler.add_job(fetch_xui_sublink_task, trigger=IntervalTrigger(hours=12))
+    task_scheduler.add_job(fetch_xui_sublink_task, trigger=IntervalTrigger(hours=12))
 
     # 合并订阅链接
-    xui_task_scheduler.add_job(sub_merge_task, trigger=CronTrigger(hour=0, minute=0))
+    task_scheduler.add_job(sub_merge_task, trigger=CronTrigger(hour=0, minute=0))
 
     # 上传订阅到 github
-    xui_task_scheduler.add_job(upload_task, trigger=IntervalTrigger(hours=12))
+    task_scheduler.add_job(upload_task, trigger=IntervalTrigger(hours=12))
 
-    xui_task_scheduler.start()
+    task_scheduler.add_job(check_subscripts_task, trigger=IntervalTrigger(hours=1))
 
-    print(xui_task_scheduler.get_jobs())
+    task_scheduler.add_job(run_fetch_proxy_task, trigger=IntervalTrigger(hours=1, minutes=10))
 
-    airport_task_scheduler.add_job(airport_collect_task, trigger=IntervalTrigger(hours=2))
-    airport_task_scheduler.start()
-    print(airport_task_scheduler.get_jobs())
+    task_scheduler.start()
+
+
+    print(task_scheduler.get_jobs())
 
     main_scheduler.add_job(generate_proxy_pool_run_task, trigger=IntervalTrigger(hours=6))
     main_scheduler.start()

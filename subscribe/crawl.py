@@ -2,20 +2,18 @@
 
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
-
 import base64
 import importlib
 import itertools
 import json
 import multiprocessing
-import os
 import random
 import re
-from doctest import master
+import os
+import sys
 
 import requests
 import string
-import sys
 import time
 import traceback
 import typing
@@ -1365,12 +1363,12 @@ def naming_task(url) -> str:
     return prefix + "".join(random.sample(string.digits + string.ascii_lowercase, random.randint(3, 5)))
 
 
-def get_telegram_pages(channel: str) -> int:
+def get_telegram_pages(channel: str, proxy=None) -> int:
     if not channel or channel.strip() == "":
         return 0
 
     url = f"https://t.me/s/{channel}"
-    content = utils.http_get(url=url)
+    content = utils.http_get(url=url, proxy=proxy)
     before = 0
     try:
         regex = rf'<link\s+rel="canonical"\s+href="/s/{channel}\?before=(\d+)">'
@@ -1382,13 +1380,13 @@ def get_telegram_pages(channel: str) -> int:
     return before
 
 
-def extract_airport_site(url: str) -> list[str]:
+def extract_airport_site(url: str, proxy=None) -> list[str]:
     if not url:
         return []
 
     logger.info(f"[AirPortCrawl] start collect airport, url: {url}")
 
-    content = utils.http_get(url=url, proxy=get_http_proxy())
+    content = utils.http_get(url=url, proxy=proxy)
     if not content:
         logger.error(f"[CrawlError] cannot any content from url: {url}")
         return []
@@ -1414,10 +1412,12 @@ def collect_airport(
         if not channel or not crawl_func or not isinstance(crawl_func, typing.Callable):
             return []
 
+        proxy = get_http_proxy()
+
         page_num = max(page_num, 1)
         base_url = f"https://t.me/s/{channel}"
 
-        count = get_telegram_pages(channel=channel)
+        count = get_telegram_pages(channel=channel, proxy=proxy)
         if count == 0:
             return []
 
@@ -1425,8 +1425,9 @@ def collect_airport(
         page_num = min(page_num, len(pages))
         logger.info(f"[TelegramCrawl] Starting crawl from telegram, channel: {channel}, pages: {page_num}")
 
-        urls = [f"{base_url}?before={x}" for x in pages[:page_num]]
-        results = multi_thread_run(crawl_func, urls, num_thread,show_progress=show_progress, description='CrawlChannel')
+        urls = [(f"{base_url}?before={x}", proxy) for x in pages[:page_num]]
+        results = multi_thread_run(crawl_func, urls, num_thread, show_progress=show_progress,
+                                   description='CrawlChannel')
         return list(itertools.chain.from_iterable(results))
 
     def crawl_website(url: str, separator: str, address_regex: str, coupon_regex: str) -> dict:

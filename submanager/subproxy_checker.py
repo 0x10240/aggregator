@@ -18,7 +18,7 @@ class SubProxyChecker:
     def __init__(self):
         self.chunk = 50
         self.proxies = []
-        self.fail_to_delete_threshold = 10
+        self.fail_to_delete_threshold = 3
         self.db_client = DbClient(redis_conn)
         self.db_client.change_table("sub_proxy")
 
@@ -111,5 +111,5 @@ class SubProxyChecker:
 
 
 if __name__ == '__main__':
-    checker = SubProxyChecker()
-    checker.run()
+    s = SubProxyChecker()
+    s.run()

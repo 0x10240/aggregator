@@ -92,21 +92,8 @@ def assign(
 
 
 def aggregate(args: argparse.Namespace) -> None:
-    def parse_gist_link(link: str) -> tuple[str, str]:
-        # 提取 gist 用户名及 id
-        words = utils.trim(link).split("/", maxsplit=1)
-        if len(words) != 2:
-            logger.error(f"cannot extract username and gist id due to invalid github gist link")
-            return "", ""
-
-        return utils.trim(words[0]), utils.trim(words[1])
-
     clash_bin, subconverter_bin = executable.which_bin()
     display = not args.invisible
-
-    subscribes_file = "subscribes.txt"
-    access_token = utils.trim(args.key)
-    username, gist_id = parse_gist_link(args.gist)
 
     tasks = assign(
         bin_name=subconverter_bin,
@@ -115,13 +102,6 @@ def aggregate(args: argparse.Namespace) -> None:
         use_gmail_alias=not args.easygoing,
         display=display,
         num_threads=args.num,
-        refresh=args.refresh,
-        skip_captcha_site=args.skip_captcha_site,
-        username=username,
-        gist_id=gist_id,
-        access_token=access_token,
-        subscribes_file=subscribes_file,
-        customize_link=args.yourself,
     )
 
     if not tasks:
@@ -270,34 +250,6 @@ def aggregate(args: argparse.Namespace) -> None:
         urls.extend(list(old_subscriptions))
 
         logger.info(f"filter subscriptions finished, total: {total}, found: {len(urls)}, discard: {discard}")
-
-    utils.write_file(filename=os.path.join(DATA_BASE, subscribes_file), lines=urls)
-    domains = [utils.extract_domain(url=x, include_protocol=True) for x in urls]
-
-    # 保存实际可使用的网站列表
-    utils.write_file(filename=os.path.join(DATA_BASE, "valid-domains.txt"), lines=list(set(domains)))
-
-    # 如有必要，上传至 Gist
-    if gist_id and access_token:
-        files, push_conf = {}, {"gistid": gist_id, "filename": list(records.keys())[0]}
-
-        for k, v in records.items():
-            if os.path.exists(v) and os.path.isfile(v):
-                with open(v, "r", encoding="utf8") as f:
-                    files[k] = {"content": f.read(), "filename": k}
-
-        if urls:
-            files[subscribes_file] = {"content": "\n".join(urls), "filename": subscribes_file}
-
-        if files:
-            push_client = push.PushToGist(token=access_token)
-
-            # 上传
-            success = push_client.push_to(content="", push_conf=push_conf, payload={"files": files}, group="collect")
-            if success:
-                logger.info(f"upload proxies and subscriptions to gist successed")
-            else:
-                logger.error(f"upload proxies and subscriptions to gist failed")
 
     # 清理工作空间
     workflow.cleanup(workspace, [])

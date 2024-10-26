@@ -547,8 +547,8 @@ def main():
 
 
 def test():
-    url = "https://airwhite.re/"
-    coupon = 'NH6LBUu5'
+    url = "https://ssrr.xyz/#/register?code=tWnDeJwR"
+    coupon = ''
     use_proxy = get_http_proxy()
     AirPort(url, coupon, use_proxy).run_task()
 

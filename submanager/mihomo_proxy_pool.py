@@ -2,7 +2,9 @@ import json
 import time
 import os
 import copy
+
 import yaml
+import platform
 import requests
 import subprocess
 from pathlib import Path
@@ -13,7 +15,10 @@ from config import redis_conn, proxy_pool_start_port
 from proxy_db.db_client import DbClient
 from urllib.parse import unquote
 
+from submanager.mihomo_speedtest import MihomoSpeedTest
 from submanager.util import get_http_proxies
+
+operating_system = platform.system().lower()
 
 """
 1. 拉取数据库中的 clash 配置
@@ -290,19 +295,30 @@ class SubscriptionPool:
             headers = {"User-Agent": "clash.meta"}
             response = requests.get(url, headers=headers, proxies=get_http_proxies(), timeout=30)
             response.encoding = 'utf-8'
-            trafic, expire = self.parse_subscription_user_info(response.headers["subscription-userinfo"])
-            ret['trafic'] = trafic
-            ret['expire'] = expire
+
+            userinfo = response.headers.get("subscription-userinfo", '')
+            if userinfo:
+                trafic, expire = self.parse_subscription_user_info(userinfo)
+                ret['trafic'] = trafic
+                ret['expire'] = expire
+
             data = yaml.safe_load(response.text)
-            ret['proxies'] = data['proxies']
+            ret['proxies'] = self.filter_available_proxies(data['proxies'])
         except Exception as e:
             logger.error(f"[ParseError] occur error when parse subscribe {url}, err: {e}")
         return ret
 
     def save_subscription_to_db(self, url):
-        key = urlparse(url).hostname
+        parsed_url = urlparse(url)
+        key = parsed_url.hostname + parsed_url.path
+        if 'githubusercontent' in key:
+            s = url.split('/')
+            key = f'{s[3]}/{s[4]}'
+
         sub_info = self.get_subscription_info(url)
+        logger.info(f'proxy num: {len(sub_info.get("proxies", []))}')
         if not self.check_sub_available(key, sub_info):
+            logger.info(f'url: {url} no available')
             return
 
         logger.info(f'putting subscription: {key} {sub_info}')
@@ -310,21 +326,15 @@ class SubscriptionPool:
 
     def check_sub_available(self, key, sub_info):
         now = time.time()
-
-        trafic, expire = sub_info.get('trafic', -1), sub_info.get('expire', now)
-
-        g_trafic = trafic / (1 << 30)
-        if trafic and g_trafic < 1:
-            logger.info(f'{key} trafic: {g_trafic:.2f} less left than 1G')
-            return False
-
+        expire = sub_info.get('expire')
         if expire and expire <= int(now):
             logger.info(f'{key} expired now')
             return False
 
         if len(sub_info.get('proxies', [])) == 0:
-            logger.info(f'{key} proxies empty')
+            logger.info(f'{key} no available proxy')
             return False
+
         return True
 
     def generate_docker_compose_config(self):
@@ -370,16 +380,74 @@ class SubscriptionPool:
         start_ret = subprocess.getoutput(start_cmd)
         print(f'start cmd:{start_cmd} ret: {start_ret}')
 
-    def run(self):
+    def run_generate_task(self):
         self.stop_mihomo_docker()
         self.generate_docker_compose_config()
         self.start_mihomo_docker()
 
+    def filter_available_proxies(self, proxies):
+        m = MihomoSpeedTest(proxies=proxies)
+        avail_proxie_names = m.filter_available_proxies()
+        ret = []
+        for proxy in proxies:
+            if not proxy["name"] in avail_proxie_names:
+                logger.debug(f'proxy: {proxy["name"]} is not available, skipping')
+                continue
+            ret.append(proxy)
+        return ret
+
+    def run_check_task(self):
+        d = self.get_all_sub_dict()
+
+        for k, v in d.items():
+            try:
+                item = json.loads(v)
+                proxies = item.get('proxies', [])
+                m = MihomoSpeedTest(proxies=proxies)
+                avail_proxies = m.filter_available_proxies()
+                new_proxies = []
+                for proxy in proxies:
+                    failure_count = proxy.get('failure', 0)
+
+                    if proxy['name'] not in avail_proxies:
+                        failure_count += 1
+                    else:
+                        failure_count = 0
+
+                    if failure_count >= 3:
+                        logger.info(f'deleting proxy: {k}, url: {item["url"]}')
+                    else:
+                        new_proxies.append(proxy)
+
+                    proxy["failure"] = failure_count
+                    item['proxies'] = new_proxies
+                    logger.info(f'proxy: {proxy["name"]} failure count: {failure_count}')
+
+                if not new_proxies:
+                    logger.info(f'{k}, suburl: {item["url"]} have no proxy now deleting it')
+                    self.subscription_db.delete(k)
+                else:
+                    logger.info(f'updating subscription: {k}')
+                    self.subscription_db.put(k, item)
+
+            except Exception as e:
+                logger.error(f'failed to parse {k}, err: {e}')
+
 
 def generate_proxy_pool_run_task():
     s = SubscriptionPool()
-    s.run()
+    s.run_generate_task()
+
+
+def check_subscripts_task():
+    s = SubscriptionPool()
+    s.run_check_task()
+
+
+def save_sub():
+    s = SubscriptionPool()
+    s.save_subscription_to_db('http://blue2sea.com/clash/proxies/aiAgent/20f2f9636703f0119ec591d9fe205146')
 
 
 if __name__ == "__main__":
-    generate_proxy_pool_run_task()
+    save_sub()

@@ -2,6 +2,12 @@
 
 # @Author  : wzdnzd
 # @Time    : 2022-07-15
+import os
+import sys
+
+current_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, ".."))
 
 import argparse
 import base64
@@ -57,10 +63,10 @@ class ProcessConfig(object):
 
 
 def load_configs(
-    url: str,
-    only_check: bool = False,
-    num_threads: int = 0,
-    display: bool = True,
+        url: str,
+        only_check: bool = False,
+        num_threads: int = 0,
+        display: bool = True,
 ) -> ProcessConfig:
     def parse_config(config: dict) -> None:
         tasks.extend(config.get("domains", []))
@@ -270,8 +276,8 @@ def load_configs(
 
     try:
         if re.match(
-            r"^(https?:\/\/(([a-zA-Z0-9]+-?)+[a-zA-Z0-9]+\.)+[a-zA-Z]+)(:\d+)?(\/.*)?(\?.*)?(#.*)?$",
-            url,
+                r"^(https?:\/\/(([a-zA-Z0-9]+-?)+[a-zA-Z0-9]+\.)+[a-zA-Z]+)(:\d+)?(\/.*)?(\?.*)?(#.*)?$",
+                url,
         ):
             headers = {"User-Agent": utils.USER_AGENT, "Referer": url}
             content = utils.http_get(url=url, headers=headers)
@@ -315,13 +321,13 @@ def load_configs(
 
 
 def assign(
-    pc: ProcessConfig,
-    retry: int,
-    bin_name: str,
-    remain: bool,
-    pushtool: push.PushTo,
-    only_check=False,
-    use_gmail_alias: bool = True,
+        pc: ProcessConfig,
+        retry: int,
+        bin_name: str,
+        remain: bool,
+        pushtool: push.PushTo,
+        only_check=False,
+        use_gmail_alias: bool = True,
 ) -> tuple[list[TaskConfig], dict, list]:
     if not isinstance(pc, ProcessConfig):
         return [], {}, []
@@ -622,7 +628,7 @@ def aggregate(args: argparse.Namespace) -> None:
             item.pop("sub", "")
 
         if len(nochecks) <= 0:
-            logger.error(f"cannot fetch any proxy, group=[{k}], cost: {time.time()-starttime:.2f}s")
+            logger.error(f"cannot fetch any proxy, group=[{k}], cost: {time.time() - starttime:.2f}s")
             continue
 
         group_conf = process_config.groups.get(k, {})
